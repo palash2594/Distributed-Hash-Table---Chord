@@ -13,6 +13,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 //The Base package for representing JSON-RPC 2.0 messages
@@ -25,8 +27,8 @@ public class PeerClass extends Thread {
     URL serverURL = null;
     static String ip;
     static int PORT;
-    ArrayList<Key> keys = new ArrayList<>();
-    int nodeID;
+    static ArrayList<Key> keys = new ArrayList<>();
+    static int nodeID;
     // Finger table stored in parts
     ArrayList<Integer> relative = new ArrayList<>();
     ArrayList<Integer> actual = new ArrayList<>();
@@ -37,13 +39,11 @@ public class PeerClass extends Thread {
     public void activity(int port) {
 
         try {
-            serverURL = new URL("http://127.0.0.1:" + port);
+            serverURL = new URL("http://" + ip + ":" + port);
 
         } catch (MalformedURLException e) {
             // handle exception...
         }
-
-
         // Create new JSON-RPC 2.0 client session
         JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
 
@@ -53,6 +53,8 @@ public class PeerClass extends Thread {
         JSONRPC2Request request = new JSONRPC2Request(method, requestID);
         ArrayList<String> list = new ArrayList<>();
         list.add(ip);
+        list.add("parameter2");
+        list.add("param3");
         request.setParams(list);
 
         JSONRPC2Response response = null;
@@ -71,8 +73,6 @@ public class PeerClass extends Thread {
             System.out.println(response.getResult());
         } else
             System.out.println(response.getError().getMessage());
-
-
     }
 
 
@@ -152,23 +152,65 @@ public class PeerClass extends Thread {
                     }
                 }
 
-                System.out.println( "body: " + body);
+                System.out.println("body: " + body);
                 JSONRPC2Request request = JSONRPC2Request.parse(body.toString());
+
+                ArrayList<Object> list = (ArrayList) request.getParams();
+                String s = (String) list.get(0);
+
                 JSONRPC2Response resp = dispatcher.process(request, null);
+
+//                request.getNamedParams().
 
                 System.out.println("result: " + resp.getResult().toString().split(",")[1]);
 
-                // send response
                 out.write("HTTP/1.1 200 OK\r\n");
                 out.write("Content-Type: application/json\r\n");
                 out.write("\r\n");
+
+                PeerClass peer = new PeerClass();
+// TODO: 10/16/18 make the handler or peer class return similar type of output so that while checking it would not throw the error
+                if (resp.getResult().toString().split(",")[0].equals("JoinNewNode")) {
+                    // do something
+                    out.write("New Node received by anchor node."); // closing the connection with the manager
+                    out.flush();
+                    out.close();
+                    socket.close();
+                    // TODO: 10/14/18 call function to get list of all the online nodes
+                    //startCollectinglineNodes()
+
+                } else if (resp.getResult().toString().equals("CollectOnlineNodes")) {
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+                    String newNodeIP = (String) paramList.get(0);
+                    HashMap<Integer, String> onlineNodes = (HashMap)  paramList.get(1);
+
+                    if (!onlineNodes.get(1).equals(ip)) { // not the anchor node
+                        peer.collectOnlineNodes(newNodeIP, onlineNodes);
+                    } else {
+                        // loop completed, make anchor node contact the new node
+                        peer.contactNewNode(newNodeIP, onlineNodes);
+                    }
+
+                    out.write("");
+                    // do not in.close();
+                    out.flush();
+                    out.close();
+                    socket.close();
+                } else if (resp.getResult().toString().equals("initializeNewNode")) {
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+                    HashMap<Integer, String> onlineNodes = (HashMap) paramList.get(0);
+                    peer.initializeFingerTable(onlineNodes);
+                }
+
+                // send response
+
                 System.out.println(resp.toJSONString());
                 out.write(resp.toJSONString());
                 // do not in.close();
                 out.flush();
                 out.close();
                 socket.close();
-                System.out.println("result: " + resp.getResult().toString().split(",")[1]);
+//                System.out.println("result: " + resp.getResult().toString().split(",")[1]);
             } catch (IOException e) {
                 System.out.println(e);
             } catch (JSONRPC2ParseException e) {
@@ -179,13 +221,154 @@ public class PeerClass extends Thread {
                 } catch (IOException e) {
                 }
             }
-            System.out.println("End");
+
         }
+    }
+
+    public void contactNewNode(String newNodeIP, HashMap onlineNodes) {
+        // call the successor node based on the finger table
+
+        try {
+            serverURL = new URL("http://" + newNodeIP + ":" + 8001);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "initializeNewNode";
+        int requestID = 6;
+
+        ArrayList<Object> list = new ArrayList<>();
+
+        list.add(onlineNodes);
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+    }
+
+    public void collectOnlineNodes(String newNodeIP, HashMap onlineNodes) {
+        // call the successor node based on the finger table
+
+        try {
+            serverURL = new URL("http://" + presentIP.get(0) + ":" + 8001);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "collectingOnlineNodes";
+        int requestID = 5;
+
+        ArrayList<Object> list = new ArrayList<>();
+
+        list.add(newNodeIP);
+
+        onlineNodes.put(nodeID, ip);
+        list.add(onlineNodes);
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+    }
+
+    public void startCollectingOnlineNodes(String newNodeIP) {
+        // call the successor node based on the finger table
+
+        // checking if the successor is itself
+        if (present.get(0) == nodeID) {
+            // send the ip of anchor node to the new node
+            // TODO: 10/15/18 send ip to new node
+            HashMap<Integer, String> onlineNodes = new HashMap<>();
+            onlineNodes.put(nodeID, ip);
+            PeerClass peer = new PeerClass();
+            peer.contactNewNode(newNodeIP, onlineNodes);
+
+        } else {
+            try {
+                serverURL = new URL("http://" + presentIP.get(0) + ":" + 8001); // calling the successor
+
+            } catch (MalformedURLException e) {
+                // handle exception...
+            }
+            // Create new JSON-RPC 2.0 client session
+            JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+            String method = "collectingOnlineNodes";
+            int requestID = 4;
+
+            ArrayList<Object> list = new ArrayList<>();
+
+            list.add(newNodeIP);
+
+            HashMap<Integer, String> onlineNodes = new HashMap<>();
+
+//            ArrayList<String> onlineNodes = new ArrayList<>();
+            onlineNodes.put(nodeID, ip);
+            list.add(onlineNodes);
+
+            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+            JSONRPC2Response response = null;
+
+            try {
+                response = mySession.send(request);
+
+            } catch (JSONRPC2SessionException e) {
+
+                System.err.println(e.getMessage());
+                // handle exception...
+            }
+
+            // Print response result / error
+            if (response.indicatesSuccess()) {
+                System.out.println(response.getResult());
+            } else
+                System.out.println(response.getError().getMessage());
+        }
+    }
+
+    boolean flag = true;
+
+    public void display() {
+        System.out.println("Hello printing elements");
     }
 
     public void run() {
 //        System.out.println("Hello");
-        System.out.println("CLient1 is running.");
+        System.out.println("Peer is running.");
         ServerSocket listener = null;
         try {
             listener = new ServerSocket(PORT);
@@ -230,6 +413,7 @@ public class PeerClass extends Thread {
     public void initialize(int port) {
 
         try {
+            // contacting the manager
             serverURL = new URL("http://127.0.0.1:" + port);
 
         } catch (MalformedURLException e) {
@@ -242,10 +426,9 @@ public class PeerClass extends Thread {
 
         String method = "joinNode";
         int requestID = 0;
-        JSONRPC2Request request = new JSONRPC2Request(method, requestID);
-        ArrayList<String> list = new ArrayList<>();
+        ArrayList<Object> list = new ArrayList<>();
         list.add(ip);
-        request.setParams(list);
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
         JSONRPC2Response response = null;
 
@@ -261,8 +444,9 @@ public class PeerClass extends Thread {
         // Print response result / error
         if (response.indicatesSuccess()) {
             System.out.println(response.getResult());
-            if (response.getResult().toString().equals("First Node")) {
+            if (response.getResult().toString().startsWith("FirstNode")) {
                 nodeID = 1;
+                System.out.println("inside initialize.");
                 initializeFingerTable();
             }
 
@@ -272,12 +456,27 @@ public class PeerClass extends Thread {
 
     public void initializeFingerTable() {
         // TODO: 10/14/18 replace with log(size)
+        System.out.println("Inside finger table");
+//        System.out.println("FT: " + actual.get(0));
         for (int i = 0; i < 4; i++) {
-            relative.add((int) (4 + Math.pow(2, i)));
-            actual.add((int) (4 + Math.pow(2, i)));
+            relative.add((int) (1 + Math.pow(2, i)));
+            actual.add((int) (1 + Math.pow(2, i)));
             present.add(1);
             presentIP.add(ip);
         }
+        System.out.println(relative);
+        System.out.println(actual);
+        System.out.println(present);
+        System.out.println(presentIP);
+    }
+
+    public void initializeFingerTable(HashMap onlineNodes) {
+        // TODO: 10/15/18 initialize finger table based on list of online nodes
+        // initialize nodeID too
+    }
+
+    public void updateFingerTable(HashMap onlineNodes, String newNodeIP) {
+        // here finger table will get updated and a node id will be assigned to the new node and will be sent to each node.
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -289,10 +488,12 @@ public class PeerClass extends Thread {
         PORT = src.nextInt();
         System.out.println(localhost.toString().split("/")[1]);
         ip = localhost.toString().split("/")[1];
+
         peer.start();
+
         System.out.println("Welcome Peer to the DHT Chord system!");
 
-        //peer.initialize(8000);
+        peer.initialize(8000);
 
         // TODO: 10/13/18 assign node id functionality
         System.out.println("Choose Node id: Y/N ?");

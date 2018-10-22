@@ -1,4 +1,4 @@
-//The Client sessions package
+package DHTChord;//The Client sessions package
 
 import com.thetransactioncompany.jsonrpc2.JSONRPC2ParseException;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Request;
@@ -12,10 +12,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 //The Base package for representing JSON-RPC 2.0 messages
 //The JSON Smart package for JSON encoding/decoding (optional)
@@ -30,10 +27,12 @@ public class PeerClass extends Thread {
     static ArrayList<Key> keys = new ArrayList<>();
     static int nodeID;
     // Finger table stored in parts
-    ArrayList<Integer> relative = new ArrayList<>();
-    ArrayList<Integer> actual = new ArrayList<>();
-    ArrayList<Integer> present = new ArrayList<>();
-    ArrayList<String> presentIP = new ArrayList<>();
+    private static ArrayList<Integer> relative = new ArrayList<>();
+    private static ArrayList<Integer> actual = new ArrayList<>();
+    private static ArrayList<Integer> present = new ArrayList<>();
+    private static ArrayList<String> presentIP = new ArrayList<>();
+
+    private static int N = 16;
 
 
     public void activity(int port) {
@@ -101,7 +100,7 @@ public class PeerClass extends Thread {
             this.dispatcher = new Dispatcher();
 
             // Register the "echo", "getDate" and "getTime" handlers with it
-            dispatcher.register(new JsonHandlerForClient1.PassKey());
+            dispatcher.register(new JsonHandlerForClient1.NewNodeJoiner());
 //            dispatcher.register(new JsonHandler.DateTimeHandler());
 //            dispatcher.register(new JsonHandler.Trial());
 
@@ -155,14 +154,14 @@ public class PeerClass extends Thread {
                 System.out.println("body: " + body);
                 JSONRPC2Request request = JSONRPC2Request.parse(body.toString());
 
-                ArrayList<Object> list = (ArrayList) request.getParams();
-                String s = (String) list.get(0);
-
+//                ArrayList<Object> list = (ArrayList) request.getParams();
+//                String s = (String) list.get(0);
                 JSONRPC2Response resp = dispatcher.process(request, null);
 
 //                request.getNamedParams().
 
-                System.out.println("result: " + resp.getResult().toString().split(",")[1]);
+                resp.getResult().toString();
+                System.out.println("result: " + resp.getResult().toString());
 
                 out.write("HTTP/1.1 200 OK\r\n");
                 out.write("Content-Type: application/json\r\n");
@@ -172,12 +171,13 @@ public class PeerClass extends Thread {
 // TODO: 10/16/18 make the handler or peer class return similar type of output so that while checking it would not throw the error
                 if (resp.getResult().toString().split(",")[0].equals("JoinNewNode")) {
                     // do something
-                    out.write("New Node received by anchor node."); // closing the connection with the manager
+                    out.write(resp.toJSONString()); // closing the connection with the manager
                     out.flush();
                     out.close();
                     socket.close();
+                    String newNodeIP = resp.getResult().toString().split(",")[1];
                     // TODO: 10/14/18 call function to get list of all the online nodes
-                    //startCollectinglineNodes()
+                    peer.startCollectingOnlineNodes(newNodeIP);
 
                 } else if (resp.getResult().toString().equals("CollectOnlineNodes")) {
                     ArrayList<Object> paramList = (ArrayList) request.getParams();
@@ -198,18 +198,29 @@ public class PeerClass extends Thread {
                     socket.close();
                 } else if (resp.getResult().toString().equals("initializeNewNode")) {
                     ArrayList<Object> paramList = (ArrayList) request.getParams();
-                    HashMap<Integer, String> onlineNodes = (HashMap) paramList.get(0);
-                    peer.initializeFingerTable(onlineNodes);
+                    HashMap<String, String> onlineNodes = (HashMap<String, String>) paramList.get(0);
+                    Long newNodeID1 = (Long) paramList.get(1);
+                    int newNodeID = newNodeID1.intValue();
+                    peer.initializeFingerTable(onlineNodes, newNodeID);
+
+                    out.write(resp.toJSONString()); // closing the connection with the manager
+                    out.flush();
+                    out.close();
+                    socket.close();
+                    String newNodeIP = (String) paramList.get(2);
+                    // TODO: 10/14/18 call function to get list of all the online nodes
+
+                } else {
+
+                    // send response
+
+                    System.out.println(resp.toJSONString());
+                    out.write(resp.toJSONString());
+                    // do not in.close();
+                    out.flush();
+                    out.close();
+                    socket.close();
                 }
-
-                // send response
-
-                System.out.println(resp.toJSONString());
-                out.write(resp.toJSONString());
-                // do not in.close();
-                out.flush();
-                out.close();
-                socket.close();
 //                System.out.println("result: " + resp.getResult().toString().split(",")[1]);
             } catch (IOException e) {
                 System.out.println(e);
@@ -225,11 +236,20 @@ public class PeerClass extends Thread {
         }
     }
 
+    /**
+     * contacts new node when the list of all online nodes is available
+     * @param newNodeIP
+     * @param onlineNodes
+     */
+
     public void contactNewNode(String newNodeIP, HashMap onlineNodes) {
-        // call the successor node based on the finger table
+
+        System.out.println("Contacting new node");
+
+        int newNodeID = updateFingerTable(onlineNodes, newNodeIP);
 
         try {
-            serverURL = new URL("http://" + newNodeIP + ":" + 8001);
+            serverURL = new URL("http://" + newNodeIP + ":" + 8002);
 
         } catch (MalformedURLException e) {
             // handle exception...
@@ -243,6 +263,8 @@ public class PeerClass extends Thread {
         ArrayList<Object> list = new ArrayList<>();
 
         list.add(onlineNodes);
+        list.add(newNodeID);
+        list.add(newNodeIP);
         JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
         JSONRPC2Response response = null;
@@ -306,9 +328,11 @@ public class PeerClass extends Thread {
 
     public void startCollectingOnlineNodes(String newNodeIP) {
         // call the successor node based on the finger table
-
+        System.out.println("Inside start collection");
         // checking if the successor is itself
+        System.out.println("Present length: " + present.size());
         if (present.get(0) == nodeID) {
+            System.out.println("Successor is me!");
             // send the ip of anchor node to the new node
             // TODO: 10/15/18 send ip to new node
             HashMap<Integer, String> onlineNodes = new HashMap<>();
@@ -441,6 +465,7 @@ public class PeerClass extends Thread {
             // handle exception...
         }
 
+
         // Print response result / error
         if (response.indicatesSuccess()) {
             System.out.println(response.getResult());
@@ -448,6 +473,8 @@ public class PeerClass extends Thread {
                 nodeID = 1;
                 System.out.println("inside initialize.");
                 initializeFingerTable();
+            } else {
+                System.out.println("Contacted Manager");
             }
 
         } else
@@ -460,23 +487,112 @@ public class PeerClass extends Thread {
 //        System.out.println("FT: " + actual.get(0));
         for (int i = 0; i < 4; i++) {
             relative.add((int) (1 + Math.pow(2, i)));
-            actual.add((int) (1 + Math.pow(2, i)));
+            actual.add((int) (1 + Math.pow(2, i)) % N);
             present.add(1);
             presentIP.add(ip);
         }
         System.out.println(relative);
         System.out.println(actual);
-        System.out.println(present);
+        System.out.println(present + "" +present.size());
         System.out.println(presentIP);
     }
 
-    public void initializeFingerTable(HashMap onlineNodes) {
+    public void initializeFingerTable(HashMap<String, String> onlineNodes, int newNodeID) {
         // TODO: 10/15/18 initialize finger table based on list of online nodes
         // initialize nodeID too
+
+        ArrayList<Integer> onlineNodeList = new ArrayList<>();
+        Iterator it = onlineNodes.entrySet().iterator();
+//        while (it.hasNext()) {
+//            Map.Entry pair = (Map.Entry) it.next();
+//            String s = (String) pair.getKey();
+//            onlineNodeList.add(Integer.parseInt(s));
+//        }
+
+        for (Map.Entry<String, String> entry : onlineNodes.entrySet()) {
+            onlineNodeList.add(Integer.parseInt(entry.getKey()));
+        }
+
+        onlineNodeList.add(newNodeID);
+        onlineNodes.put("" + newNodeID, ip);
+
+        Collections.sort(onlineNodeList);
+        int size = onlineNodeList.size();
+        // adding elements by adding with N
+        for (int i = 0; i < size; i++) {
+            onlineNodeList.add(onlineNodeList.get(i) + N);
+        }
+
+        for (int i = 0; i < (int)(Math.log(16) / Math.log(2)); i++) {
+            actual.add(i, (newNodeID + (int)Math.pow(2, i)) % N);
+            int k = 0;
+            while (actual.get(i) > onlineNodeList.get(k)) {
+                k++;
+            }
+            present.add(i, onlineNodeList.get(k) % N);
+            String IPadd = (String)onlineNodes.get("" + onlineNodeList.get(k) % N);
+            presentIP.add(i, IPadd);
+            relative.add(i, actual.get(i));
+        }
+
+        System.out.println("Finger Table");
+        System.out.println(actual);
+        System.out.println(present);
+        System.out.println(presentIP);
+
     }
 
-    public void updateFingerTable(HashMap onlineNodes, String newNodeIP) {
+    public int updateFingerTable(HashMap onlineNodes, String newNodeIP) {
         // here finger table will get updated and a node id will be assigned to the new node and will be sent to each node.
+
+        ArrayList<Integer> onlineNodeList = new ArrayList<>();
+        Iterator it = onlineNodes.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry pair = (Map.Entry) it.next();
+            onlineNodeList.add((Integer) pair.getKey());
+        }
+
+        int hash =  newNodeIP.hashCode() % N;
+        int newNodeID = findAptNodeID(onlineNodeList, hash);
+        onlineNodeList.add(newNodeID);
+        onlineNodes.put(newNodeID, newNodeIP);
+
+        Collections.sort(onlineNodeList);
+        int size = onlineNodeList.size();
+        // adding elements by adding with N
+        for (int i = 0; i < size; i++) {
+            onlineNodeList.add(onlineNodeList.get(i) + N);
+        }
+
+        for (int i = 0; i < (int)(Math.log(16) / Math.log(2)); i++) {
+            int k = 0;
+            while (actual.get(i) > onlineNodeList.get(k)) {
+                k++;
+            }
+            present.remove(i);
+            present.add(i, onlineNodeList.get(k) % N);
+            presentIP.remove(i);
+            String IPadd = (String)onlineNodes.get(onlineNodeList.get(k) % N);
+            presentIP.add(i, IPadd);
+        }
+
+        return newNodeID;
+    }
+
+    /**
+     * to assign node id to the new node based on the vacancy
+     *
+     * @param onlineNodeList
+     * @param hash
+     * @return
+     */
+
+    public int findAptNodeID (ArrayList<Integer> onlineNodeList, int hash) {
+
+        while (onlineNodeList.contains(hash)) {
+            hash = (hash + 3) % N;
+        }
+        return hash;
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {

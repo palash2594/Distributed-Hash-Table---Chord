@@ -1,4 +1,4 @@
-
+package DHTChord;
 
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Request;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Response;
@@ -28,27 +28,39 @@ public class JsonHandlerForClient1 {
         }
     }
 
-    public static class Trial2 implements RequestHandler {
+    public static class NewNodeJoiner implements RequestHandler {
 
         @Override
         public String[] handledRequests() {
-            return new String[]{"getClientID"};
+            return new String[]{"newNode", "getOnlineNodes", "collectingOnlineNodes", "initializeNewNode"};
         }
 
         @Override
         public JSONRPC2Response process(JSONRPC2Request req, MessageContext messageContext) {
 
 
-            if (req.getMethod().equals("getClientID")) {
+            if (req.getMethod().equals("newNode")) {
 //                System.out.println("this ip address is: " + (String) req.getParams());
 
                 List params = (List) req.getParams();
-                Object input = params.get(0);
-                InetAddress ip = (InetAddress) input;
-                return new JSONRPC2Response("IP address successfully received" + ip.toString(), req.getID());
+                String ip = (String) params.get(0);
+                return new JSONRPC2Response("JoinNewNode," + ip, req.getID());
+
+            } else if (req.getMethod().equals("getOnlineNodes")) {
+                List params = (List) req.getParams();
+                String newNodeIP = params.get(0).toString();
+
+            } else if (req.getMethod().equals("colllectingOnlineNodes")) {
+                // do something
+                return new JSONRPC2Response("CollectOnlineNodes", req.getID());
+            } else if (req.getMethod().equals("initializeNewNode")) {
+
+                return new JSONRPC2Response("initializeNewNode", req.getID());
             }
             return null;
         }
+
+
 
         public JSONRPC2Response process(JSONRPC2Request req, MessageContext messageContext, Object params) {
 

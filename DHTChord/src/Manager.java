@@ -97,6 +97,7 @@ public class Manager extends Thread {
                     // send response
                     // TODO: 10/14/18 make peer 1 initialize itself
                     out.write(resp.toJSONString());
+//                        out.write(new JSONRPC2Response("FirstNode Edited One", request.getID()).toJSONString());
 
                     out.flush();
                     out.close();
@@ -105,13 +106,14 @@ public class Manager extends Thread {
                 } else if (resp.getResult().toString().startsWith("NotFirstNode")) {
                     System.out.println("Request received");
                     String newNodeIP = resp.getResult().toString().split(",")[1];
-                    out.write(""); // closing the connection with the new node
+                    out.write(resp.toJSONString()); // closing the connection with the new node
                     out.flush();
+                    out.close();
                     out.close();
                     socket.close();
 
                     // TODO: 10/14/18 function call to anchor node anc check on port number
-                    //                  manager.callAnchorNode(Manager.onlineNodes.get(1), 8001, newNodeIP);
+                    manager.callAnchorNode(Manager.onlineNodes.get(1), 8001, newNodeIP);
                 }
 
             } catch (IOException e) {
@@ -123,6 +125,7 @@ public class Manager extends Thread {
     }
 
     public synchronized void callAnchorNode(String anchorNodeIP, int port, String newNodeIP) {
+        System.out.println("call anchor node");
         try {// connecting with the anchor node
             serverURL = new URL("http://" + anchorNodeIP + ":" + port);
 
@@ -155,7 +158,7 @@ public class Manager extends Thread {
 
         // Print response result / error
         if (response.indicatesSuccess()) {
-            System.out.println(response.getResult());
+            System.out.println("Contacted anchor node");
         } else
             System.out.println(response.getError().getMessage());
     }
@@ -184,6 +187,7 @@ public class Manager extends Thread {
     }
 
     public static void main(String[] args) {
+        System.out.println("Welcome to the DHT Chord System!");
         Manager manager = new Manager();
         manager.start();
     }

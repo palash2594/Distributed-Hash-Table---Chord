@@ -1,3 +1,4 @@
+package DHTChord;
 
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Request;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Response;
@@ -22,13 +23,12 @@ public class JsonHandlerForManager {
                 int size = Manager.onlineNodes.size();
 
                 List params = (List) req.getParams();
-                Object input = params.get(0);
-                String ip = (String) input;
+                String ip  = (String) params.get(0);
                 // if size == 0 => first online node in the system
                 if (size == 0) {
-                    return new JSONRPC2Response("1," + ip, req.getID());
+                    return new JSONRPC2Response("FirstNode," + ip, req.getID());
                 } else {
-                    return new JSONRPC2Response("2," + ip, req.getID());
+                    return new JSONRPC2Response("NotFirstNode," + ip, req.getID());
                 }
                 //return new JSONRPC2Response("string to return", req.getID());
             }

@@ -5,7 +5,6 @@ import com.thetransactioncompany.jsonrpc2.JSONRPC2Response;
 import com.thetransactioncompany.jsonrpc2.server.MessageContext;
 import com.thetransactioncompany.jsonrpc2.server.RequestHandler;
 
-import java.net.InetAddress;
 import java.util.List;
 
 public class JsonHandlerForClient1 {
@@ -32,7 +31,7 @@ public class JsonHandlerForClient1 {
 
         @Override
         public String[] handledRequests() {
-            return new String[]{"newNode", "getOnlineNodes", "collectingOnlineNodes", "initializeNewNode"};
+            return new String[]{"newNode", "getOnlineNodes", "collectingOnlineNodes", "initializeNewNode", "updateFingerTableNodeAddition"};
         }
 
         @Override
@@ -50,12 +49,15 @@ public class JsonHandlerForClient1 {
                 List params = (List) req.getParams();
                 String newNodeIP = params.get(0).toString();
 
-            } else if (req.getMethod().equals("colllectingOnlineNodes")) {
-                // do something
+            } else if (req.getMethod().equals("collectingOnlineNodes")) {
+
                 return new JSONRPC2Response("CollectOnlineNodes", req.getID());
             } else if (req.getMethod().equals("initializeNewNode")) {
 
                 return new JSONRPC2Response("initializeNewNode", req.getID());
+            } else if (req.getMethod().equals("updateFingerTableNodeAddition")) {
+
+                return new JSONRPC2Response("updateFingerTableNodeAddition", req.getID());
             }
             return null;
         }

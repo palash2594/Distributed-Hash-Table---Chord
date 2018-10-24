@@ -113,7 +113,7 @@ public class Manager extends Thread {
                     socket.close();
 
                     // TODO: 10/14/18 function call to anchor node anc check on port number
-                    manager.callAnchorNode(Manager.onlineNodes.get(1), 8001, newNodeIP);
+                    manager.callAnchorNode(Manager.onlineNodes.get(1), 8020, newNodeIP);
                 }
 
             } catch (IOException e) {
@@ -166,7 +166,7 @@ public class Manager extends Thread {
     public void run() {
         ServerSocket listener = null;
         try {
-            listener = new ServerSocket(8000);
+            listener = new ServerSocket(8015);
         } catch (IOException e) {
             e.printStackTrace();
         }

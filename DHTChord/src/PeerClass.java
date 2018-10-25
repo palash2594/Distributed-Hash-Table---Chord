@@ -233,6 +233,42 @@ public class PeerClass extends Thread {
 
                     peer.updateFingerTable(onlineNodes, newNodeIP, newNodeID);
                     peer.updateFingerTableNodeAddition(onlineNodes, newNodeID, newNodeIP, onlineNodeListDone);
+                } else if (resp.getResult().toString().equals("StoreKeyInsert")) {
+
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+                    String k = (String) paramList.get(0);
+                    String[] k2 = k.split(" ");
+                    Key key = new Key(Integer.parseInt(k2[0]), k2[1], Integer.parseInt(k2[2]));
+                    System.out.println(key);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    keys.add(key);
+                    System.out.println("Key added successfully: " + key);
+
+                } else if (resp.getResult().toString().equals("FindKeyInsert")) {
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    String k = (String) paramList.get(0);
+                    String[] k2 = k.split(" ");
+                    Key key = new Key(Integer.parseInt(k2[0]), k2[1], Integer.parseInt(k2[2]));
+                    System.out.println(key);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    if (nodeID == key.id) {
+                        keys.add(key);
+                        System.out.println("Key added successfully: " + key);
+                    } else {
+                        peer.findNodeForKey(key);
+                        System.out.println("received key, passing on");
+                    }
                 } else {
 
                     // send response
@@ -323,6 +359,14 @@ public class PeerClass extends Thread {
             // call updateAboutNewNode()
         }
     }
+
+    /**
+     * update finger table of old nodes, after a new node has been added in the system
+     * @param onlineNodes list of all the online nodes
+     * @param newNodeID id of the new node
+     * @param newNodeIP the ip of the new node
+     * @param onlineNodeListDone list of online nodes who's finger table has been updated
+     */
 
     public void updateFingerTableNodeAddition(HashMap<String, String> onlineNodes, int newNodeID, String newNodeIP, ArrayList<String> onlineNodeListDone) {
 
@@ -649,7 +693,7 @@ public class PeerClass extends Thread {
             present.add(i, onlineNodeList.get(k) % N);
             String IPadd = (String)onlineNodes.get("" + onlineNodeList.get(k) % N);
             presentIP.add(i, IPadd);
-            relative.add(i, actual.get(i));
+            relative.add(i, (newNodeID + (int) Math.pow(2, i)));
         }
 
         System.out.println("Finger Table");
@@ -725,6 +769,109 @@ public class PeerClass extends Thread {
         return hash;
     }
 
+    public void deliverKey(Key key, String operation, String nodeIP) {
+        try {
+            // contacting the manager
+            serverURL = new URL("http://" + nodeIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+
+
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = operation;
+        int requestID = 12;
+        ArrayList<Object> list = new ArrayList<>();
+        list.add("" + key.id + " " + key.message + " " + key.size);
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+    }
+
+    /**
+     * determines where to send the key to
+     * @param key the key to be sent
+     */
+
+    public void findNodeForKey(Key key) {
+        System.out.println("Inside findnodeforkey");
+        int keyID = key.id;
+        if (present.contains(keyID)) {
+            int id = present.indexOf(keyID);
+            peer.deliverKey(key, "StoreKeyInsert", presentIP.get(id));
+        } else {
+            if (keyID < relative.get(0)) {
+                keyID += N;
+            }
+            int i = 0;
+            for (i = 0; i < 4; i++) {
+                if (keyID < relative.get(i)) {
+                    break;
+                }
+            }
+            if (i == 4) {
+                i--;
+            }
+            if (actual.get(i) < present.get(i)) {
+                if ((keyID % N) < present.get(i)) {
+                    peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
+                } else {
+                    peer.deliverKey(key, "FindKeyInsert", presentIP.get(i));
+                }
+            } else {
+                int presentI = present.get(i) + N;
+                if (keyID < presentI) {
+                    peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
+                } else {
+                    peer.deliverKey(key, "FindKeyInsert", presentIP.get(i));
+                }
+            }
+        }
+    }
+
+    /**
+     * creates a key and checks whether it belongs to the current node,
+     * if not then route to the appropriate node using finger table
+     */
+
+    public void insertNode() {
+        Scanner src = new Scanner(System.in);
+        System.out.println("Enter file name");
+        String fileName = src.next();
+        int size = src.nextInt();
+        int keyhash = Math.abs((fileName + size).hashCode() % N);
+        System.out.println("key hssh: " + keyhash);
+        Key key = new Key(keyhash, fileName, size);
+
+        if (nodeID == keyhash) {
+            System.out.println("Adding key here.");
+            keys.add(key);
+        } else {
+            System.out.println("In else");
+            peer.findNodeForKey(key);
+        }
+
+    }
+
     public static void main(String[] args) throws IOException, InterruptedException {
 
 //        PeerClass peer = new PeerClass();
@@ -760,10 +907,10 @@ public class PeerClass extends Thread {
                         System.out.println(presentIP);
                         break;
                     case 2:
-                        peer.findCorrectNode();
+                        peer.insertNode();
                         break;
                     case 3:
-                        peer.goOffline();
+                        peer.getKey();
                         break;
                     default:
                         System.out.println("Invalid choice");
@@ -774,9 +921,5 @@ public class PeerClass extends Thread {
 //            int port = src.nextInt();
 //            peer.activity(port);
         }
-
-
     }
 }
-
-// xyz

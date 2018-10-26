@@ -19,4 +19,9 @@ public class Key {
                 ", size=" + size +
                 '}';
     }
+
+    public String display () {
+        return "" + id + "," + message + "," + size;
+    }
+
 }

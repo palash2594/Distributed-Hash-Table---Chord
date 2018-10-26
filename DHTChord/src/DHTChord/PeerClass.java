@@ -213,7 +213,11 @@ public class PeerClass extends Thread {
                     out.flush();
                     out.close();
                     socket.close();
-                    peer.initializeFingerTable(onlineNodes, newNodeID);
+                    try {
+                        peer.initializeFingerTable(onlineNodes, newNodeID);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
 
                     String newNodeIP = (String) paramList.get(2);
                     // TODO: 10/14/18 call function to get list of all the online nodes
@@ -269,6 +273,56 @@ public class PeerClass extends Thread {
                         peer.findNodeForKey(key);
                         System.out.println("received key, passing on");
                     }
+                } else if (resp.getResult().toString().equals("requestKeys")) {
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    String newNodeID = (String) paramList.get(0);
+                    String newNodeIP = (String) paramList.get(1);
+                    String predecessor = (String) paramList.get(2);
+
+////                    String keys1 = peer.sendingKeysToNewNode(newNodeID, newNodeIP, predecessor);
+//                    if (keys1.equals("No keys")) {
+//                        System.out.println("sending no keys");
+//                        out.write(resp.toJSONString());
+//
+//                    } else {
+//                        JSONRPC2Response res = new JSONRPC2Response(keys1, request.getID());
+//                        out.write(res.toJSONString());
+//                    }
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    String keys1 = peer.findKeysforNewNode(newNodeID, newNodeIP, predecessor);
+                    peer.sendKeysToNewNode(keys1, newNodeIP);
+
+                } else if (resp.getResult().toString().equals("sendingKeysToNewNode")) {
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    String keyString = (String) paramList.get(0);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    System.out.println("Keys received are: " + keyString);
+
+                    if (keyString.equals( "No keys")) {
+                        System.out.println("No keys to receive");
+                    } else {
+                        String[] keysReceived = keyString.split("---");
+
+                        System.out.println("Keys received");
+                        for (int i = 0; i < keysReceived.length; i++) {
+                            String[] k = keysReceived[i].split(",");
+                            Key key = new Key(Integer.parseInt(k[0]), k[1], Integer.parseInt(k[2]));
+                            System.out.println(key);
+                            keys.add(key);
+                        }
+                    }
+
                 } else {
 
                     // send response
@@ -307,6 +361,7 @@ public class PeerClass extends Thread {
 
         int newNodeID = updateFingerTable(onlineNodes, newNodeIP, -1);
 
+        // making other online nodes update their FT with the information regarding this new node
         if (onlineNodes.size() > 2) {
 
             ArrayList<String> onlineNodeListDone = new ArrayList<>();
@@ -655,7 +710,7 @@ public class PeerClass extends Thread {
         System.out.println(presentIP);
     }
 
-    public void initializeFingerTable(HashMap<String, String> onlineNodes, int newNodeID) {
+    public void initializeFingerTable(HashMap<String, String> onlineNodes, int newNodeID) throws InterruptedException {
         // TODO: 10/15/18 initialize finger table based on list of online nodes
         // initialize nodeID too
 
@@ -701,6 +756,184 @@ public class PeerClass extends Thread {
         System.out.println(present);
         System.out.println(presentIP);
 
+        Thread.sleep(1000);
+
+        int successorID = 1;
+        int predecessorID = 1;
+
+        for (int i = 0; i < onlineNodeList.size(); i++) {
+            if (onlineNodeList.get(i) <= newNodeID) {
+                continue;
+            } else {
+                successorID = onlineNodeList.get(i) % N;
+                if (i == 1) {
+                    predecessorID = onlineNodeList.get(onlineNodeList.size() - 1) % N;
+                } else {
+                    predecessorID = onlineNodeList.get(i - 2);
+                }
+                break;
+            }
+        }
+
+        System.out.println("the successor is: " + onlineNodes.get("" + successorID));
+        System.out.println("the predecessor is: " + onlineNodes.get("" + predecessorID));
+        peer.requestKeysFromSuccessor(onlineNodes.get("" + successorID), "" + predecessorID);
+
+    }
+
+    public void requestKeysFromSuccessor(String successorIP, String predecessor) {
+
+        System.out.println("Inside requestKeysFromSuccessor");
+
+        try {
+            serverURL = new URL("http://" + successorIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "requestKeys";
+        int requestID = 15;
+
+        ArrayList<Object> list = new ArrayList<>();
+
+        list.add("" + nodeID);
+        list.add(ip);
+        list.add(predecessor);
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult() + "**");
+//            if (response.getResult().toString().equals("requestKeys")) {
+//                // do nothing
+//            } else {
+//                String[] keysReceived = response.getResult().toString().split("---");
+//
+//                System.out.println("Keys received");
+//                for (int i = 0; i < keysReceived.length; i++) {
+//                    String[] k = keysReceived[i].split(",");
+//                    Key key = new Key(Integer.parseInt(k[0]), k[1], Integer.parseInt(k[2]));
+//                    System.out.println(key);
+//                    keys.add(key);
+//                }
+//            }
+        } else
+            System.out.println(response.getError().getMessage());
+
+    }
+
+    public String findKeysforNewNode(String newNodeID, String newNodeIP, String predecessor) {
+        System.out.println("Starting");
+        int newNodeid = Integer.parseInt(newNodeID);
+        int currentID = nodeID;
+        int predecessorID = Integer.parseInt(predecessor);
+        if (nodeID < newNodeid) {
+            currentID += N;
+        }
+
+        int k = 1;
+        int pos = 0;
+
+        ArrayList<Integer> keyIDs = new ArrayList<>();
+
+        while (true) {
+            System.out.println("in while");
+            if ((predecessorID + k++) % N != newNodeid ) {
+                keyIDs.add(predecessorID + k - 1);
+            } else {
+                break;
+            }
+        }
+
+        System.out.println("outside while");
+
+        String keysToSend = "";
+        ArrayList<String> keysToRemove = new ArrayList<>();
+
+        if (keys.size() == 0) {
+            return "No keys";
+        }
+
+        System.out.println("over here");
+
+        int size = keys.size();
+
+        for (int i = 0; i < size; i++) {
+            if (keyIDs.contains(keys.get(i).id)) {
+                keysToSend += keys.get(i).display();
+                keysToSend += "---";
+                keysToRemove.add(keys.get(i).message);
+//                keysToSend.add(keys.get(i).display());
+            }
+            System.out.println("in for");
+        }
+
+        for (int i = 0; i < keys.size(); i++) {
+            if (keysToRemove.contains(keys.get(i).message)) {
+                keys.remove(i);
+                i--;
+            }
+        }
+
+        System.out.println("Ending");
+
+        if (keysToSend.equals("")) {
+            return "No keys";
+        }
+
+        return keysToSend;
+    }
+
+    public void sendKeysToNewNode(String keyString, String newNodeIP) {
+        System.out.println("Inside requestKeysFromSuccessor");
+
+        try {
+            serverURL = new URL("http://" + newNodeIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "sendingKeysToNewNode";
+        int requestID = 16;
+
+        ArrayList<Object> list = new ArrayList<>();
+
+        list.add(keyString);
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
     }
 
     public int updateFingerTable(HashMap <String, String> onlineNodes, String newNodeIP, int newNodeID) {

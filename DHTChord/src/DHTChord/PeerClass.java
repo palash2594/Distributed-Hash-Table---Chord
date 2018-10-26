@@ -184,7 +184,7 @@ public class PeerClass extends Thread {
                 } else if (resp.getResult().toString().equals("CollectOnlineNodes")) {
                     ArrayList<Object> paramList = (ArrayList) request.getParams();
                     String newNodeIP = (String) paramList.get(0);
-                    HashMap<String, String> onlineNodes = (HashMap)  paramList.get(1);
+                    HashMap<String, String> onlineNodes = (HashMap) paramList.get(1);
                     System.out.println("collecting nodes: " + onlineNodes);
 
                     out.write(resp.toJSONString());
@@ -222,7 +222,7 @@ public class PeerClass extends Thread {
                     String newNodeIP = (String) paramList.get(2);
                     // TODO: 10/14/18 call function to get list of all the online nodes
 
-                } else if (resp.getResult().toString().equals("updateFingerTableNodeAddition")){
+                } else if (resp.getResult().toString().equals("updateFingerTableNodeAddition")) {
 
                     ArrayList<Object> paramList = (ArrayList) request.getParams();
                     HashMap<String, String> onlineNodes = (HashMap<String, String>) paramList.get(0);
@@ -309,7 +309,7 @@ public class PeerClass extends Thread {
 
                     System.out.println("Keys received are: " + keyString);
 
-                    if (keyString.equals( "No keys")) {
+                    if (keyString.equals("No keys")) {
                         System.out.println("No keys to receive");
                     } else {
                         String[] keysReceived = keyString.split("---");
@@ -349,6 +349,7 @@ public class PeerClass extends Thread {
 
     /**
      * contacts new node when the list of all online nodes is available
+     *
      * @param newNodeIP
      * @param onlineNodes
      */
@@ -417,9 +418,10 @@ public class PeerClass extends Thread {
 
     /**
      * update finger table of old nodes, after a new node has been added in the system
-     * @param onlineNodes list of all the online nodes
-     * @param newNodeID id of the new node
-     * @param newNodeIP the ip of the new node
+     *
+     * @param onlineNodes        list of all the online nodes
+     * @param newNodeID          id of the new node
+     * @param newNodeIP          the ip of the new node
      * @param onlineNodeListDone list of online nodes who's finger table has been updated
      */
 
@@ -434,7 +436,7 @@ public class PeerClass extends Thread {
         System.out.println("ipAdd val inside node addition before" + ipAdd);
 
         for (Map.Entry<String, String> entry : onlineNodes.entrySet()) {
-            if(onlineNodeListDone.contains(entry.getKey())) {
+            if (onlineNodeListDone.contains(entry.getKey())) {
                 System.out.println("inside contains: " + entry.getKey());
                 continue;
             }
@@ -509,7 +511,7 @@ public class PeerClass extends Thread {
 
         list.add(newNodeIP);
 
-        System.out.println("suppose to be 15: " + nodeID + " " +ip);
+        System.out.println("suppose to be 15: " + nodeID + " " + ip);
         onlineNodes.put("" + nodeID, ip);
         System.out.println("checking contents of online nodes: " + onlineNodes);
         list.add(onlineNodes);
@@ -706,7 +708,7 @@ public class PeerClass extends Thread {
         }
         System.out.println(relative);
         System.out.println(actual);
-        System.out.println(present + "" +present.size());
+        System.out.println(present + "" + present.size());
         System.out.println(presentIP);
     }
 
@@ -739,14 +741,14 @@ public class PeerClass extends Thread {
             onlineNodeList.add(onlineNodeList.get(i) + N);
         }
 
-        for (int i = 0; i < (int)(Math.log(16) / Math.log(2)); i++) {
+        for (int i = 0; i < (int) (Math.log(16) / Math.log(2)); i++) {
             actual.add(i, (newNodeID + (int) Math.pow(2, i)) % N);
             int k = 0;
             while (actual.get(i) > onlineNodeList.get(k)) {
                 k++;
             }
             present.add(i, onlineNodeList.get(k) % N);
-            String IPadd = (String)onlineNodes.get("" + onlineNodeList.get(k) % N);
+            String IPadd = (String) onlineNodes.get("" + onlineNodeList.get(k) % N);
             presentIP.add(i, IPadd);
             relative.add(i, (newNodeID + (int) Math.pow(2, i)));
         }
@@ -852,7 +854,7 @@ public class PeerClass extends Thread {
 
         while (true) {
             System.out.println("in while");
-            if ((predecessorID + k++) % N != newNodeid ) {
+            if ((predecessorID + k++) % N != newNodeid) {
                 keyIDs.add(predecessorID + k - 1);
             } else {
                 break;
@@ -936,7 +938,7 @@ public class PeerClass extends Thread {
             System.out.println(response.getError().getMessage());
     }
 
-    public int updateFingerTable(HashMap <String, String> onlineNodes, String newNodeIP, int newNodeID) {
+    public int updateFingerTable(HashMap<String, String> onlineNodes, String newNodeIP, int newNodeID) {
         // here finger table will get updated and a node id will be assigned to the new node and will be sent to each node.
 
         ArrayList<Integer> onlineNodeList = new ArrayList<>();
@@ -965,7 +967,7 @@ public class PeerClass extends Thread {
             onlineNodeList.add(onlineNodeList.get(i) + N);
         }
 
-        for (int i = 0; i < (int)(Math.log(16) / Math.log(2)); i++) {
+        for (int i = 0; i < (int) (Math.log(16) / Math.log(2)); i++) {
             int k = 0;
             while (actual.get(i) > onlineNodeList.get(k)) {
                 k++;
@@ -973,7 +975,7 @@ public class PeerClass extends Thread {
             present.remove(i);
             present.add(i, onlineNodeList.get(k) % N);
             presentIP.remove(i);
-            String IPadd = (String)onlineNodes.get("" + (onlineNodeList.get(k) % N));
+            String IPadd = (String) onlineNodes.get("" + (onlineNodeList.get(k) % N));
             presentIP.add(i, IPadd);
         }
 
@@ -990,7 +992,7 @@ public class PeerClass extends Thread {
      * @return
      */
 
-    public int findAptNodeID (ArrayList<Integer> onlineNodeList, int hash) {
+    public int findAptNodeID(ArrayList<Integer> onlineNodeList, int hash) {
 
         Random rand = new Random();
 
@@ -1042,6 +1044,7 @@ public class PeerClass extends Thread {
 
     /**
      * determines where to send the key to
+     *
      * @param key the key to be sent
      */
 
@@ -1051,6 +1054,7 @@ public class PeerClass extends Thread {
         if (present.contains(keyID)) {
             int id = present.indexOf(keyID);
             peer.deliverKey(key, "StoreKeyInsert", presentIP.get(id));
+            System.out.println("StoreKeyInsert1");
         } else {
             if (keyID < relative.get(0)) {
                 keyID += N;
@@ -1061,21 +1065,23 @@ public class PeerClass extends Thread {
                     break;
                 }
             }
-            if (i == 4) {
-                i--;
-            }
-            if (actual.get(i) < present.get(i)) {
+            i--;
+            if (actual.get(i) <= present.get(i)) {
                 if ((keyID % N) < present.get(i)) {
                     peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
+                    System.out.println("StoreKeyInsert2");
                 } else {
                     peer.deliverKey(key, "FindKeyInsert", presentIP.get(i));
+                    System.out.println("FindKeyInsert4");
                 }
             } else {
                 int presentI = present.get(i) + N;
                 if (keyID < presentI) {
                     peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
+                    System.out.println("StoreKeyInsert3");
                 } else {
                     peer.deliverKey(key, "FindKeyInsert", presentIP.get(i));
+                    System.out.println("FindKeyInsert5");
                 }
             }
         }
@@ -1136,7 +1142,7 @@ public class PeerClass extends Thread {
                     case 1:
                         System.out.println(relative);
                         System.out.println(actual);
-                        System.out.println(present + "" +present.size());
+                        System.out.println(present + "" + present.size());
                         System.out.println(presentIP);
                         break;
                     case 2:
@@ -1149,7 +1155,7 @@ public class PeerClass extends Thread {
                         System.out.println("Invalid choice");
                 }
 
-            }while (ch != 4);
+            } while (ch != 4);
 //            System.out.println("Enter peer port number");
 //            int port = src.nextInt();
 //            peer.activity(port);

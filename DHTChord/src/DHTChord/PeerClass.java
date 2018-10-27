@@ -1,12 +1,15 @@
 package DHTChord;
 
+import com.sun.corba.se.impl.logging.InterceptorsSystemException;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2ParseException;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Request;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Response;
 import com.thetransactioncompany.jsonrpc2.client.JSONRPC2Session;
 import com.thetransactioncompany.jsonrpc2.client.JSONRPC2SessionException;
 import com.thetransactioncompany.jsonrpc2.server.Dispatcher;
+import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 
+import javax.management.ObjectName;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -323,7 +326,87 @@ public class PeerClass extends Thread {
                         }
                     }
 
-                } else {
+                } else if (resp.getResult().toString().equals("sendingKeysToSuccessor")) {
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    String keyString = (String) paramList.get(0);
+                    String offlineNodeID = (String) paramList.get(1);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    String[] keysReceived = keyString.split("---");
+
+                    System.out.println("Keys received from node: " + offlineNodeID);
+                    for (int i = 0; i < keysReceived.length; i++) {
+                        String[] k = keysReceived[i].split(",");
+                        Key key = new Key(Integer.parseInt(k[0]), k[1], Integer.parseInt(k[2]));
+                        System.out.println(key);
+                        keys.add(key);
+                    }
+                } else if (resp.getResult().toString().equals("removeMe")) {
+
+                    System.out.println("inside removeMe");
+
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    String offlineNode = (String) paramList.get(0);
+                    String offlineNodeIP = (String) paramList.get(1);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    HashMap<String, String> onlineNodes = new HashMap<>();
+                    String startingNodeID = "" + nodeID;
+                    peer.contactOnlineNodesRemove(onlineNodes, startingNodeID, offlineNode, offlineNodeIP);
+
+                } else if (resp.getResult().toString().equals("collectingOnlineNodesRemove")) {
+
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    String startingNodeID = (String) paramList.get(0);
+                    String offlineNodeID = (String) paramList.get(1);
+                    String offlineNodeIP = (String) paramList.get(2);
+                    HashMap<String, String> onlineNodes = (HashMap<String, String>) paramList.get(3);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    peer.contactOnlineNodesRemove(onlineNodes, startingNodeID, offlineNodeID, offlineNodeIP);
+                } else if (resp.getResult().toString().equals("allowNodeGoOffline")) {
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    System.out.println("Going offline!");
+                    System.exit(0);
+                } else if (resp.getResult().toString().equals("updateFingerTableNodeRemovePassOn")) {
+
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+
+                    HashMap<String, String> onlineNodes = (HashMap<String, String>) paramList.get(0);
+                    String offlineNodeID = (String) paramList.get(1);
+                    String offlineNodeIP = (String) paramList.get(2);
+                    ArrayList<String> onlineNodeListDone = (ArrayList<String>) paramList.get(3);
+
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+                    peer.updateFingerTableNodeRemove(onlineNodes, offlineNodeID, offlineNodeIP);
+                    peer.updateFingerTableNodeRemovePassOn(onlineNodes, offlineNodeID, offlineNodeIP, onlineNodeListDone);
+                }
+
+                else {
 
                     // send response
 
@@ -867,6 +950,7 @@ public class PeerClass extends Thread {
         ArrayList<String> keysToRemove = new ArrayList<>();
 
         if (keys.size() == 0) {
+            System.out.println("No keys 1");
             return "No keys";
         }
 
@@ -894,6 +978,7 @@ public class PeerClass extends Thread {
         System.out.println("Ending");
 
         if (keysToSend.equals("")) {
+            System.out.println("No Keys 2");
             return "No keys";
         }
 
@@ -1108,7 +1193,328 @@ public class PeerClass extends Thread {
             System.out.println("In else");
             peer.findNodeForKey(key);
         }
+    }
 
+    /**
+     * Send keys to the successor before going offline.
+     */
+
+    public void sendKeysToSuccessor() {
+        String successorIP = presentIP.get(0);
+
+        try {
+            // contacting the manager
+            serverURL = new URL("http://" + successorIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "sendingKeysToSuccessor";
+        int requestID = 18;
+        ArrayList<Object> list = new ArrayList<>();
+        String keyString = "";
+
+        if (keys.size() == 0) {
+            System.out.println("No keys to send to successor");
+        } else {
+
+            // making string of keys
+            for (Key key : keys) {
+                keyString += "" + key.id + "," + key.message + "," + key.size;
+                keyString += "---";
+            }
+
+            list.add(keyString);
+            list.add("" + nodeID);
+            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+            JSONRPC2Response response = null;
+
+            try {
+                response = mySession.send(request);
+
+            } catch (JSONRPC2SessionException e) {
+
+                System.err.println(e.getMessage());
+                // handle exception...
+            }
+
+
+            // Print response result / error
+            if (response.indicatesSuccess()) {
+                System.out.println(response.getResult());
+            } else
+                System.out.println(response.getError().getMessage());
+        }
+        peer.contactSuccessorToRemove();
+    }
+
+    public void contactSuccessorToRemove() {
+        System.out.println("inside contactSuccessor");
+        String successorIP = presentIP.get(0);
+
+        try {
+            // contacting the manager
+            serverURL = new URL("http://" + successorIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        ArrayList<Object> list = new ArrayList<>();
+        list.add("" + nodeID);
+        list.add(ip);
+
+        String method = "removeMe";
+        int requestID = 19;
+
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+    }
+
+    public void contactOnlineNodesRemove(HashMap<String, String> onlineNodes, String startingNodeID, String offlineNodeID, String offlineNodeIP) {
+
+        System.out.println("inside contactOnlineNodesRemove");
+
+        System.out.println("NodeID: " + nodeID);
+        System.out.println("Starting node: " + startingNodeID);
+        // completes the loop
+        if (startingNodeID.equals("" + nodeID) && onlineNodes.containsKey((String)"" + nodeID)) {
+            peer.allowNodeGoOffline(offlineNodeIP);
+            peer.updateFingerTableNodeRemove(onlineNodes, offlineNodeID, offlineNodeIP);
+            ArrayList<String> onlineNodeListDone = new ArrayList<>();
+            onlineNodeListDone.add(offlineNodeID);
+            onlineNodeListDone.add("" + nodeID);
+            peer.updateFingerTableNodeRemovePassOn(onlineNodes, offlineNodeID, offlineNodeIP, onlineNodeListDone);
+            // contact node to go offline successfully
+            return;
+        }
+
+        String successorIP = presentIP.get(0);
+
+        try {
+            // contacting the manager
+            serverURL = new URL("http://" + successorIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "collectingOnlineNodesRemove";
+        int requestID = 20;
+        ArrayList<Object> list = new ArrayList<>();
+
+        onlineNodes.put("" + nodeID, ip);
+
+        list.add(startingNodeID);
+        list.add(offlineNodeID);
+        list.add(offlineNodeIP);
+        list.add(onlineNodes);
+
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+
+        // updatefingertableremove()
+    }
+
+    public void allowNodeGoOffline(String offlineNodeIP) {
+
+        try {
+            // contacting the manager
+            serverURL = new URL("http://" + offlineNodeIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "allowNodeGoOffline";
+        int requestID = 21;
+
+        JSONRPC2Request request = new JSONRPC2Request(method, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+    }
+
+    public void updateFingerTableNodeRemove(HashMap<String, String> onlineNodes, String offlineNodeID, String offlineNodeIP) {
+        // here finger table will get updated and a node id will be assigned to the new node and will be sent to each node.
+
+        System.out.println("Inside updateFingerTableNodeRemove");
+
+        ArrayList<String> onlineNodeList = new ArrayList<>();
+
+        for (Map.Entry<String, String> entry : onlineNodes.entrySet()) {
+            onlineNodeList.add(entry.getKey());
+        }
+        System.out.println("OfflineNodeID: " + offlineNodeID);
+        onlineNodeList.remove(offlineNodeID);
+
+        ArrayList<Integer> temp = new ArrayList<>();
+        for (String s : onlineNodeList) {
+            temp.add(Integer.parseInt(s));
+        }
+
+        Collections.sort(temp);
+        System.out.println("temp: " + temp);
+        System.out.println("1. before sorting OnlineNodeList: " + onlineNodeList);
+
+        onlineNodeList.clear();
+        int pos = 0;
+        for (Integer i : temp) {
+            onlineNodeList.add(pos++, "" + i);
+        }
+
+        System.out.println("before sorting OnlineNodeList: " + onlineNodeList);
+        System.out.println("OnlineNodeList: " + onlineNodeList);
+        int size = onlineNodeList.size();
+        // adding elements by adding with N
+        for (int i = 0; i < size; i++) {
+            onlineNodeList.add("" + (Integer.parseInt(onlineNodeList.get(i)) + N));
+        }
+
+        System.out.println("OnlineNodeList: " + onlineNodeList);
+        System.out.println("OnlineNodes: " + onlineNodes);
+
+        for (int i = 0; i < (int) (Math.log(16) / Math.log(2)); i++) {
+            int k = 0;
+            while (actual.get(i) > Integer.parseInt(onlineNodeList.get(k))) {
+                System.out.println("K: " + k);
+                k++;
+            }
+            present.remove(i);
+            present.add(i, Integer.parseInt(onlineNodeList.get(k)) % N);
+            presentIP.remove(i);
+            String IPadd = (String) onlineNodes.get("" + (Integer.parseInt(onlineNodeList.get(k)) % N));
+            presentIP.add(i, IPadd);
+        }
+
+        System.out.println("updated presentIP: " + presentIP);
+    }
+
+    public void updateFingerTableNodeRemovePassOn(HashMap<String, String> onlineNodes, String oflineNodeID, String offlineNodeIP, ArrayList<String> onlineNodeListDone) {
+
+        onlineNodeListDone.add("" + nodeID);
+
+        System.out.println("online nodes list done: " + onlineNodeListDone);
+        System.out.println("online nodes: " + onlineNodes);
+
+        String ipAdd = null;
+        System.out.println("ipAdd val inside node addition before" + ipAdd);
+
+        for (Map.Entry<String, String> entry : onlineNodes.entrySet()) {
+            if (onlineNodeListDone.contains(entry.getKey())) {
+                System.out.println("inside contains: " + entry.getKey());
+                continue;
+            }
+            System.out.println("outside contains: " + entry.getKey());
+            ipAdd = entry.getValue();
+            System.out.println("outside contains: " + entry.getValue());
+            break;
+        }
+
+        System.out.println("online nodes: " + onlineNodes);
+
+        System.out.println("ipAdd val inside node addition" + ipAdd);
+
+        if (!(ipAdd == null)) {
+
+            try {
+                serverURL = new URL("http://" + ipAdd + ":" + 8020);
+
+            } catch (MalformedURLException e) {
+                // handle exception...
+            }
+            // Create new JSON-RPC 2.0 client session
+            JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+            String method = "updateFingerTableNodeRemovePassOn";
+            int requestID = 20;
+
+            ArrayList<Object> list = new ArrayList<>();
+
+            list.add(onlineNodes);
+            list.add(oflineNodeID);
+            list.add(offlineNodeIP);
+            list.add(onlineNodeListDone);
+
+            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+            JSONRPC2Response response = null;
+
+            try {
+                response = mySession.send(request);
+
+            } catch (JSONRPC2SessionException e) {
+
+                System.err.println(e.getMessage());
+                // handle exception...
+            }
+
+            // Print response result / error
+            if (response.indicatesSuccess()) {
+                System.out.println(response.getResult());
+            } else
+                System.out.println(response.getError().getMessage());
+        }
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -1151,14 +1557,15 @@ public class PeerClass extends Thread {
                     case 3:
                         peer.getKey();
                         break;
+                    case 4:
+                        peer.sendKeysToSuccessor();
+                        break;
                     default:
                         System.out.println("Invalid choice");
                 }
 
             } while (ch != 4);
-//            System.out.println("Enter peer port number");
-//            int port = src.nextInt();
-//            peer.activity(port);
+
         }
     }
 }

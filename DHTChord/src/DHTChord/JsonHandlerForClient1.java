@@ -32,7 +32,8 @@ public class JsonHandlerForClient1 {
         @Override
         public String[] handledRequests() {
             return new String[]{"newNode", "getOnlineNodes", "collectingOnlineNodes", "initializeNewNode",
-                    "updateFingerTableNodeAddition", "StoreKeyInsert", "FindKeyInsert", "requestKeys", "sendingKeysToNewNode"};
+                    "updateFingerTableNodeAddition", "StoreKeyInsert", "FindKeyInsert", "requestKeys", "sendingKeysToNewNode",
+                    "sendingKeysToSuccessor", "removeMe", "collectingOnlineNodesRemove", "allowNodeGoOffline", "updateFingerTableNodeRemovePassOn"};
         }
 
         @Override
@@ -71,6 +72,21 @@ public class JsonHandlerForClient1 {
             } else if (req.getMethod().equals("sendingKeysToNewNode")) {
 
                 return new JSONRPC2Response("sendingKeysToNewNode", req.getID());
+            } else if (req.getMethod().equals("sendingKeysToSuccessor")) {
+
+                return new JSONRPC2Response("sendingKeysToSuccessor", req.getID());
+            } else if (req.getMethod().equals("removeMe")) {
+
+                return new JSONRPC2Response("removeMe", req.getID());
+            } else if (req.getMethod().equals("collectingOnlineNodesRemove")) {
+
+                return new JSONRPC2Response("collectingOnlineNodesRemove", req.getID());
+            } else if (req.getMethod().equals("allowNodeGoOffline")) {
+
+                return new JSONRPC2Response("allowNodeGoOffline", req.getID());
+            } else if (req.getMethod().equals("updateFingerTableNodeRemovePassOn")) {
+
+                return new JSONRPC2Response("updateFingerTableNodeRemovePassOn", req.getID());
             }
             return null;
         }

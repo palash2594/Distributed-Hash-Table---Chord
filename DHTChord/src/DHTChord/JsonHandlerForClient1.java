@@ -33,7 +33,8 @@ public class JsonHandlerForClient1 {
         public String[] handledRequests() {
             return new String[]{"newNode", "getOnlineNodes", "collectingOnlineNodes", "initializeNewNode",
                     "updateFingerTableNodeAddition", "StoreKeyInsert", "FindKeyInsert", "requestKeys", "sendingKeysToNewNode",
-                    "sendingKeysToSuccessor", "removeMe", "collectingOnlineNodesRemove", "allowNodeGoOffline", "updateFingerTableNodeRemovePassOn"};
+                    "sendingKeysToSuccessor", "removeMe", "collectingOnlineNodesRemove", "allowNodeGoOffline", "updateFingerTableNodeRemovePassOn",
+                    "notifyAboutKey"};
         }
 
         @Override
@@ -87,6 +88,12 @@ public class JsonHandlerForClient1 {
             } else if (req.getMethod().equals("updateFingerTableNodeRemovePassOn")) {
 
                 return new JSONRPC2Response("updateFingerTableNodeRemovePassOn", req.getID());
+            }
+            else if (req.getMethod().equals("notifyAboutKey")) {
+//
+//                List params = (List) req.getParams();
+//                String status = (String) params.get(0);
+                return new JSONRPC2Response("notifyAboutKey", req.getID());
             }
             return null;
         }

@@ -7,7 +7,6 @@ import com.thetransactioncompany.jsonrpc2.client.JSONRPC2Session;
 import com.thetransactioncompany.jsonrpc2.client.JSONRPC2SessionException;
 import com.thetransactioncompany.jsonrpc2.server.Dispatcher;
 
-import javax.management.ObjectName;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -95,19 +94,11 @@ public class PeerClass extends Thread {
          * All the interesting work is done in the run method.
          */
         public Handler(Socket socket) {
-//            System.out.println("Hello3");
             this.socket = socket;
-//            System.out.println("Here 1");
-//            ip = socket.getLocalAddress();
             // Create a new JSON-RPC 2.0 request dispatcher
             this.dispatcher = new Dispatcher();
 
-            // Register the "echo", "getDate" and "getTime" handlers with it
             dispatcher.register(new JsonHandlerForClient1.NewNodeJoiner());
-//            dispatcher.register(new JsonHandler.DateTimeHandler());
-//            dispatcher.register(new JsonHandler.Trial());
-
-
         }
 
         /**
@@ -127,21 +118,16 @@ public class PeerClass extends Thread {
                 // read request
                 String line;
                 line = in.readLine();
-//                System.out.println(line);
                 StringBuilder raw = new StringBuilder();
                 raw.append("" + line);
                 boolean isPost = line.startsWith("POST");
                 int contentLength = 0;
                 while (!(line = in.readLine()).equals("")) {
-//                    System.out.println(line);
                     raw.append('\n' + line);
                     if (isPost) {
                         final String contentHeader = "Content-Length: ";
-//                        System.out.println("Hello");
-//                        System.out.println(line);
                         if (line.startsWith(contentHeader)) {
                             contentLength = Integer.parseInt(line.substring(contentHeader.length()));
-//                            System.out.println("Size of content length: " + contentLength);
                         }
                     }
                 }
@@ -157,11 +143,7 @@ public class PeerClass extends Thread {
                 System.out.println("body: " + body);
                 JSONRPC2Request request = JSONRPC2Request.parse(body.toString());
 
-//                ArrayList<Object> list = (ArrayList) request.getParams();
-//                String s = (String) list.get(0);
                 JSONRPC2Response resp = dispatcher.process(request, null);
-
-//                request.getNamedParams().
 
                 resp.getResult().toString();
                 System.out.println("result: " + resp.getResult().toString());
@@ -170,8 +152,6 @@ public class PeerClass extends Thread {
                 out.write("Content-Type: application/json\r\n");
                 out.write("\r\n");
 
-//                PeerClass peer = new PeerClass();
-// TODO: 10/16/18 make the handler or peer class return similar type of output so that while checking it would not throw the error
                 if (resp.getResult().toString().split(",")[0].equals("JoinNewNode")) {
                     // do something
                     out.write(resp.toJSONString()); // closing the connection with the manager
@@ -179,7 +159,6 @@ public class PeerClass extends Thread {
                     out.close();
                     socket.close();
                     String newNodeIP = resp.getResult().toString().split(",")[1];
-                    // TODO: 10/14/18 call function to get list of all the online nodes
                     peer.startCollectingOnlineNodes(newNodeIP);
 
                 } else if (resp.getResult().toString().equals("CollectOnlineNodes")) {
@@ -201,7 +180,6 @@ public class PeerClass extends Thread {
                         peer.collectOnlineNodes(newNodeIP, onlineNodes);
                     } else {
                         // loop completed, make anchor node contact the new node
-                        System.out.println("Now here");
                         peer.contactNewNode(newNodeIP, onlineNodes);
                     }
 
@@ -221,7 +199,6 @@ public class PeerClass extends Thread {
                     }
 
                     String newNodeIP = (String) paramList.get(2);
-                    // TODO: 10/14/18 call function to get list of all the online nodes
 
                 } else if (resp.getResult().toString().equals("updateFingerTableNodeAddition")) {
 
@@ -246,13 +223,29 @@ public class PeerClass extends Thread {
                     Key key = new Key(Integer.parseInt(k2[0]), k2[1], Integer.parseInt(k2[2]));
                     System.out.println(key);
 
+                    String function = (String) paramList.get(1);
+                    String findNodeIP = (String) paramList.get(2);
+
                     out.write(resp.toJSONString());
                     out.flush();
                     out.close();
                     socket.close();
 
-                    keys.add(key);
-                    System.out.println("Key added successfully: " + key);
+                    if (function.equals("Store")) {
+                        keys.add(key);
+                        System.out.println("Key added successfully: " + key);
+                    } else {
+                        int flag = 0;
+                        for (int i = 0; i < keys.size(); i++) {
+                            if (keys.get(i).id == key.id) {
+                                peer.notifyNodeAboutKey("found", findNodeIP);
+                                flag = 1;
+                            }
+                        }
+                        if (flag == 0) {
+                            peer.notifyNodeAboutKey("notFound", findNodeIP);
+                        }
+                    }
 
                 } else if (resp.getResult().toString().equals("FindKeyInsert")) {
                     ArrayList<Object> paramList = (ArrayList) request.getParams();
@@ -261,6 +254,9 @@ public class PeerClass extends Thread {
                     String[] k2 = k.split(" ");
                     Key key = new Key(Integer.parseInt(k2[0]), k2[1], Integer.parseInt(k2[2]));
                     System.out.println(key);
+
+                    String function = (String) paramList.get(1);
+                    String findNodeIP = (String) paramList.get(2);
 
                     out.write(resp.toJSONString());
                     out.flush();
@@ -271,7 +267,7 @@ public class PeerClass extends Thread {
                         keys.add(key);
                         System.out.println("Key added successfully: " + key);
                     } else {
-                        peer.findNodeForKey(key);
+                        peer.findNodeForKey(key, function, findNodeIP);
                         System.out.println("received key, passing on");
                     }
                 } else if (resp.getResult().toString().equals("requestKeys")) {
@@ -281,15 +277,6 @@ public class PeerClass extends Thread {
                     String newNodeIP = (String) paramList.get(1);
                     String predecessor = (String) paramList.get(2);
 
-////                    String keys1 = peer.sendingKeysToNewNode(newNodeID, newNodeIP, predecessor);
-//                    if (keys1.equals("No keys")) {
-//                        System.out.println("sending no keys");
-//                        out.write(resp.toJSONString());
-//
-//                    } else {
-//                        JSONRPC2Response res = new JSONRPC2Response(keys1, request.getID());
-//                        out.write(res.toJSONString());
-//                    }
                     out.write(resp.toJSONString());
                     out.flush();
                     out.close();
@@ -402,6 +389,24 @@ public class PeerClass extends Thread {
                     socket.close();
                     peer.updateFingerTableNodeRemove(onlineNodes, offlineNodeID, offlineNodeIP);
                     peer.updateFingerTableNodeRemovePassOn(onlineNodes, offlineNodeID, offlineNodeIP, onlineNodeListDone);
+                } else if (resp.getResult().toString().equals("notifyAboutKey")) {
+
+                    System.out.println("Inside notifyaboutkey");
+
+                    ArrayList<Object> paramList = (ArrayList) request.getParams();
+                    String status = (String) paramList.get(0);
+                    String nodeID = (String) paramList.get(1);
+
+                    out.write(resp.toJSONString());
+                    out.flush();
+                    out.close();
+                    socket.close();
+
+                    if (status.equals("found")) {
+                        System.out.println("The file is stored on node: " + nodeID);
+                    } else {
+                        System.out.println("File is not present in the system.");
+                    }
                 }
 
                 else {
@@ -624,7 +629,6 @@ public class PeerClass extends Thread {
         if (present.get(0) == nodeID) {
             System.out.println("Successor is me!");
             // send the ip of anchor node to the new node
-            // TODO: 10/15/18 send ip to new node
             HashMap<String, String> onlineNodes = new HashMap<>();
             onlineNodes.put("" + nodeID, ip);
 //            PeerClass peer = new PeerClass();
@@ -683,11 +687,17 @@ public class PeerClass extends Thread {
     boolean flag = true;
 
     public void display() {
-        System.out.println("Hello printing elements");
+        System.out.println("Finger table: ");
+        System.out.println(" ------------------------------------------");
+        System.out.println("| \ti \t| k + 2i   \t| successor    |");
+        System.out.println("|----------------------------------|");
+        for (int i = 0; i < (int) (Math.log(16) / Math.log(2)); i++) {
+            System.out.println("|\t" + i + " \t|   " + actual.get(i) + "\t\t|" + present.get(i) + " (" + presentIP.get(i) + ") |");
+        }
+        System.out.println(" ------------------------------------------");
     }
 
     public void run() {
-//        System.out.println("Hello");
         System.out.println("Peer is running.");
         ServerSocket listener = null;
         try {
@@ -699,7 +709,6 @@ public class PeerClass extends Thread {
             while (true) {
                 System.out.println("Ip " + ip);
                 new Handler(listener.accept()).start();
-//                System.out.println("Hello1");
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -720,14 +729,6 @@ public class PeerClass extends Thread {
                 System.out.println(key);
             }
         }
-    }
-
-    public void findCorrectNode() {
-
-    }
-
-    public void goOffline() {
-
     }
 
     public void initialize(int port) {
@@ -780,17 +781,13 @@ public class PeerClass extends Thread {
     public void initializeFingerTable() {
         // TODO: 10/14/18 replace with log(size)
         System.out.println("Inside finger table");
-//        System.out.println("FT: " + actual.get(0));
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < (int) (Math.log(16) / Math.log(2)); i++) {
             relative.add((int) (1 + Math.pow(2, i)));
             actual.add((int) (1 + Math.pow(2, i)) % N);
             present.add(1);
             presentIP.add(ip);
         }
-        System.out.println(relative);
-        System.out.println(actual);
-        System.out.println(present + "" + present.size());
-        System.out.println(presentIP);
+        peer.display();
     }
 
     public void initializeFingerTable(HashMap<String, String> onlineNodes, int newNodeID) throws InterruptedException {
@@ -799,11 +796,6 @@ public class PeerClass extends Thread {
 
         ArrayList<Integer> onlineNodeList = new ArrayList<>();
         Iterator it = onlineNodes.entrySet().iterator();
-//        while (it.hasNext()) {
-//            Map.Entry pair = (Map.Entry) it.next();
-//            String s = (String) pair.getKey();
-//            onlineNodeList.add(Integer.parseInt(s));
-//        }
 
         for (Map.Entry<String, String> entry : onlineNodes.entrySet()) {
             onlineNodeList.add(Integer.parseInt(entry.getKey()));
@@ -811,9 +803,6 @@ public class PeerClass extends Thread {
 
         System.out.println("I'm the second node: " + newNodeID);
         nodeID = newNodeID;
-//
-//        onlineNodeList.add(newNodeID);
-//        onlineNodes.put("" + newNodeID, ip);
 
         Collections.sort(onlineNodeList);
         int size = onlineNodeList.size();
@@ -833,11 +822,6 @@ public class PeerClass extends Thread {
             presentIP.add(i, IPadd);
             relative.add(i, (newNodeID + (int) Math.pow(2, i)));
         }
-
-        System.out.println("Finger Table");
-        System.out.println(actual);
-        System.out.println(present);
-        System.out.println(presentIP);
 
         // let other threads update their finger table with new node information,
         // and then request for keys from the successor
@@ -903,22 +887,8 @@ public class PeerClass extends Thread {
         // Print response result / error
         if (response.indicatesSuccess()) {
             System.out.println(response.getResult() + "**");
-//            if (response.getResult().toString().equals("requestKeys")) {
-//                // do nothing
-//            } else {
-//                String[] keysReceived = response.getResult().toString().split("---");
-//
-//                System.out.println("Keys received");
-//                for (int i = 0; i < keysReceived.length; i++) {
-//                    String[] k = keysReceived[i].split(",");
-//                    Key key = new Key(Integer.parseInt(k[0]), k[1], Integer.parseInt(k[2]));
-//                    System.out.println(key);
-//                    keys.add(key);
-//                }
-//            }
         } else
             System.out.println(response.getError().getMessage());
-
     }
 
     public String findKeysforNewNode(String newNodeID, String newNodeIP, String predecessor) {
@@ -963,7 +933,6 @@ public class PeerClass extends Thread {
                 keysToSend += keys.get(i).display();
                 keysToSend += "---";
                 keysToRemove.add(keys.get(i).message);
-//                keysToSend.add(keys.get(i).display());
             }
             System.out.println("in for");
         }
@@ -1028,10 +997,6 @@ public class PeerClass extends Thread {
 
         ArrayList<Integer> onlineNodeList = new ArrayList<>();
         Iterator it = onlineNodes.entrySet().iterator();
-//        while (it.hasNext()) {
-//            Map.Entry pair = (Map.Entry) it.next();
-//            onlineNodeList.add((Integer) pair.getKey());
-//        }
 
         for (Map.Entry<String, String> entry : onlineNodes.entrySet()) {
             onlineNodeList.add(Integer.parseInt(entry.getKey()));
@@ -1089,7 +1054,7 @@ public class PeerClass extends Thread {
         return hash;
     }
 
-    public void deliverKey(Key key, String operation, String nodeIP) {
+    public void deliverKey(Key key, String operation, String nodeIP, String function, String findNodeIP) {
         try {
             // contacting the manager
             serverURL = new URL("http://" + nodeIP + ":" + 8020);
@@ -1106,6 +1071,8 @@ public class PeerClass extends Thread {
         int requestID = 12;
         ArrayList<Object> list = new ArrayList<>();
         list.add("" + key.id + " " + key.message + " " + key.size);
+        list.add(function);
+        list.add(findNodeIP);
         JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
         JSONRPC2Response response = null;
@@ -1133,12 +1100,12 @@ public class PeerClass extends Thread {
      * @param key the key to be sent
      */
 
-    public void findNodeForKey(Key key) {
-        System.out.println("Inside findnodeforkey");
+    public void findNodeForKey(Key key, String function, String findNodeIP) {
+        System.out.println("Inside findnodeforkey 1");
         int keyID = key.id;
         if (present.contains(keyID)) {
             int id = present.indexOf(keyID);
-            peer.deliverKey(key, "StoreKeyInsert", presentIP.get(id));
+            peer.deliverKey(key, "StoreKeyInsert", presentIP.get(id), function, findNodeIP);
             System.out.println("StoreKeyInsert1");
         } else {
             if (keyID < relative.get(0)) {
@@ -1153,19 +1120,19 @@ public class PeerClass extends Thread {
             i--;
             if (actual.get(i) <= present.get(i)) {
                 if ((keyID) < present.get(i)) {
-                    peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
+                    peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i), function, findNodeIP);
                     System.out.println("StoreKeyInsert2");
                 } else {
-                    peer.deliverKey(key, "FindKeyInsert", presentIP.get(i));
+                    peer.deliverKey(key, "FindKeyInsert", presentIP.get(i), function, findNodeIP);
                     System.out.println("FindKeyInsert4");
                 }
             } else {
                 int presentI = present.get(i) + N;
                 if (keyID < presentI) {
-                    peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
+                    peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i), function, findNodeIP);
                     System.out.println("StoreKeyInsert3");
                 } else {
-                    peer.deliverKey(key, "FindKeyInsert", presentIP.get(i));
+                    peer.deliverKey(key, "FindKeyInsert", presentIP.get(i), function, findNodeIP);
                     System.out.println("FindKeyInsert5");
                 }
             }
@@ -1177,7 +1144,7 @@ public class PeerClass extends Thread {
      * if not then route to the appropriate node using finger table
      */
 
-    public void insertNode() {
+    public void insertNode(String function, String findNodeIP) {
         Scanner src = new Scanner(System.in);
         System.out.println("Enter file name");
         String fileName = src.next();
@@ -1186,12 +1153,32 @@ public class PeerClass extends Thread {
         System.out.println("key hssh: " + keyhash);
         Key key = new Key(keyhash, fileName, size);
 
-        if (nodeID == keyhash) {
-            System.out.println("Adding key here.");
-            keys.add(key);
+        if (function.equals("Store")) {
+
+            if (nodeID == keyhash) {
+                System.out.println("Adding key here.");
+                keys.add(key);
+            } else {
+                System.out.println("In else store");
+                peer.findNodeForKey(key, function, findNodeIP);
+            }
         } else {
-            System.out.println("In else");
-            peer.findNodeForKey(key);
+            if (nodeID == keyhash) {
+                int flag = 0;
+                for (int i = 0; i < keys.size(); i++) {
+                    if (keys.get(i).id == key.id) {
+                        System.out.println(key.message + "File is stored at this node");
+                        flag = 1;
+                        break;
+                    }
+                }
+                if (flag == 0) {
+                    System.out.println("File is not present in the system");
+                }
+            } else {
+                System.out.println("In else find");
+                peer.findNodeForKey(key, function, findNodeIP);
+            }
         }
     }
 
@@ -1517,11 +1504,50 @@ public class PeerClass extends Thread {
         }
     }
 
+    public void notifyNodeAboutKey(String status, String findNodeIP) {
+
+
+        try {
+            // contacting the manager
+            serverURL = new URL("http://" + findNodeIP + ":" + 8020);
+
+        } catch (MalformedURLException e) {
+            // handle exception...
+        }
+
+        // Create new JSON-RPC 2.0 client session
+        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
+
+        String method = "notifyAboutKey";
+        int requestID = 22;
+        ArrayList<Object> list = new ArrayList<>();
+        list.add(status);
+        list.add("" + nodeID);
+
+        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+
+        JSONRPC2Response response = null;
+
+        try {
+            response = mySession.send(request);
+
+        } catch (JSONRPC2SessionException e) {
+
+            System.err.println(e.getMessage());
+            // handle exception...
+        }
+
+        // Print response result / error
+        if (response.indicatesSuccess()) {
+            System.out.println(response.getResult());
+        } else
+            System.out.println(response.getError().getMessage());
+
+    }
+
     public static void main(String[] args) throws IOException, InterruptedException {
 
-//        PeerClass peer = new PeerClass();
         InetAddress localhost = InetAddress.getLocalHost();
-//        System.out.println("Enter port number");
         Scanner src = new Scanner(System.in);
         PORT = 8020;
         System.out.println(localhost.toString().split("/")[1]);
@@ -1538,27 +1564,27 @@ public class PeerClass extends Thread {
         System.out.println("Choose Node id: Y/N ?");
 
         while (true) {
-            System.out.println("Select the following functionalities \n 1. Display Keys \n 2. Upload Keys \n" +
-                    " 3. Go Offline");
+            System.out.println("Select the following functionalities \n 1. Display Keys \n 2. Upload File \n" +
+                    " 3. Get list of keys \n4. Go Offline \n 5. Find a File");
             int ch;
 
             do {
                 ch = src.nextInt();
                 switch (ch) {
                     case 1:
-                        System.out.println(relative);
-                        System.out.println(actual);
-                        System.out.println(present + "" + present.size());
-                        System.out.println(presentIP);
+                        peer.display();
                         break;
                     case 2:
-                        peer.insertNode();
+                        peer.insertNode("Store", ip);
                         break;
                     case 3:
                         peer.getKey();
                         break;
                     case 4:
                         peer.sendKeysToSuccessor();
+                        break;
+                    case 5:
+                        peer.insertNode("Find", ip);
                         break;
                     default:
                         System.out.println("Invalid choice");
@@ -1569,3 +1595,5 @@ public class PeerClass extends Thread {
         }
     }
 }
+
+// #####

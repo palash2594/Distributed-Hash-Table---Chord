@@ -1,13 +1,11 @@
 package DHTChord;
 
-import com.sun.corba.se.impl.logging.InterceptorsSystemException;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2ParseException;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Request;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Response;
 import com.thetransactioncompany.jsonrpc2.client.JSONRPC2Session;
 import com.thetransactioncompany.jsonrpc2.client.JSONRPC2SessionException;
 import com.thetransactioncompany.jsonrpc2.server.Dispatcher;
-import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 
 import javax.management.ObjectName;
 import java.io.BufferedReader;
@@ -841,6 +839,8 @@ public class PeerClass extends Thread {
         System.out.println(present);
         System.out.println(presentIP);
 
+        // let other threads update their finger table with new node information,
+        // and then request for keys from the successor
         Thread.sleep(1000);
 
         int successorID = 1;
@@ -937,7 +937,7 @@ public class PeerClass extends Thread {
 
         while (true) {
             System.out.println("in while");
-            if ((predecessorID + k++) % N != newNodeid) {
+            if ((predecessorID + k++) % N != (newNodeid + 1) % N) {
                 keyIDs.add(predecessorID + k - 1);
             } else {
                 break;
@@ -1152,7 +1152,7 @@ public class PeerClass extends Thread {
             }
             i--;
             if (actual.get(i) <= present.get(i)) {
-                if ((keyID % N) < present.get(i)) {
+                if ((keyID) < present.get(i)) {
                     peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i));
                     System.out.println("StoreKeyInsert2");
                 } else {

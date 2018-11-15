@@ -34,6 +34,7 @@ public class PeerClass extends Thread {
     private static PeerClass peer = new PeerClass();
     private static String managerIP;
 
+    Random random = new Random();
     private static int N = 16;
 
 
@@ -121,7 +122,8 @@ public class PeerClass extends Thread {
                 } else if (resp.getResult().toString().equals("CollectOnlineNodes")) {
                     ArrayList<Object> paramList = (ArrayList) request.getParams();
                     String newNodeIP = (String) paramList.get(0);
-                    HashMap<String, String> onlineNodes = (HashMap) paramList.get(1);
+                    String startingNodeIP = (String) paramList.get(1);
+                    HashMap<String, String> onlineNodes = (HashMap) paramList.get(2);
 
                     out.write(resp.toJSONString());
                     // do not in.close();
@@ -129,8 +131,8 @@ public class PeerClass extends Thread {
                     out.close();
                     socket.close();
 
-                    if (!onlineNodes.get("1").equals(ip)) { // not the anchor node
-                        peer.collectOnlineNodes(newNodeIP, onlineNodes);
+                    if (!startingNodeIP.equals(ip)) { // not the anchor node
+                        peer.collectOnlineNodes(newNodeIP, startingNodeIP, onlineNodes);
                     } else {
                         // loop completed, make anchor node contact the new node
                         peer.contactNewNode(newNodeIP, onlineNodes);
@@ -319,7 +321,10 @@ public class PeerClass extends Thread {
                     out.close();
                     socket.close();
 
+//                    Manager.onlineNodes.remove(nodeID);
+
                     System.out.println("Going offline!");
+                    peer.removeFromAnchorNodeList();
                     System.exit(0);
                 } else if (resp.getResult().toString().equals("updateFingerTableNodeRemovePassOn")) {
 
@@ -357,7 +362,7 @@ public class PeerClass extends Thread {
 
                     // send response
 
-                    System.out.println(resp.toJSONString());
+//                    System.out.println(resp.toJSONString());
                     out.write(resp.toJSONString());
                     // do not in.close();
 
@@ -387,8 +392,6 @@ public class PeerClass extends Thread {
 
     public void contactNewNode(String newNodeIP, HashMap onlineNodes) {
 
-//        System.out.println("Contacting new node");
-
         int newNodeID = updateFingerTable(onlineNodes, newNodeIP, -1);
 
         // making other online nodes update their FT with the information regarding this new node
@@ -401,15 +404,6 @@ public class PeerClass extends Thread {
             updateFingerTableNodeAddition(onlineNodes, newNodeID, newNodeIP, onlineNodeListDone);
         }
 
-        try {
-            serverURL = new URL("http://" + newNodeIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
-
         String method = "initializeNewNode";
         int requestID = 6;
 
@@ -418,24 +412,8 @@ public class PeerClass extends Thread {
         list.add(onlineNodes);
         list.add(newNodeID);
         list.add(newNodeIP);
-        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
-        JSONRPC2Response response = null;
-
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult());
-        } else
-            System.out.println(response.getError().getMessage());
+        peer.connection(newNodeIP, 8020, method, requestID, list);
 
         if (onlineNodes.size() > 2) {
             // call updateAboutNewNode()
@@ -467,15 +445,6 @@ public class PeerClass extends Thread {
 
         if (!(ipAdd == null)) {
 
-            try {
-                serverURL = new URL("http://" + ipAdd + ":" + 8020);
-
-            } catch (MalformedURLException e) {
-                // handle exception...
-            }
-            // Create new JSON-RPC 2.0 client session
-            JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
-
             String method = "updateFingerTableNodeAddition";
             int requestID = 11;
 
@@ -486,35 +455,19 @@ public class PeerClass extends Thread {
             list.add(newNodeIP);
             list.add(onlineNodeListDone);
 
-            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+            peer.connection(ipAdd, 8020, method, requestID, list);
 
-            JSONRPC2Response response = null;
-
-            try {
-                response = mySession.send(request);
-
-            } catch (JSONRPC2SessionException e) {
-
-                System.err.println(e.getMessage());
-                // handle exception...
-            }
-
-            // Print response result / error
-            if (response.indicatesSuccess()) {
-//                System.out.println(response.getResult());
-            } else
-                System.out.println(response.getError().getMessage());
         }
     }
 
     /**
      * to collect the list of all online roles
      *
-     * @param newNodeIP IP address of the new node
+     * @param newNodeIP   IP address of the new node
      * @param onlineNodes map of online nodes found yet
      */
 
-    public void collectOnlineNodes(String newNodeIP, HashMap onlineNodes) {
+    public void collectOnlineNodes(String newNodeIP, String startingNodeIP, HashMap onlineNodes) {
         // call the successor node based on the finger table
 
         try {
@@ -532,32 +485,18 @@ public class PeerClass extends Thread {
         ArrayList<Object> list = new ArrayList<>();
 
         list.add(newNodeIP);
+        list.add(startingNodeIP);
 
         onlineNodes.put("" + nodeID, ip);
-//        System.out.println("checking contents of online nodes: " + onlineNodes);
         list.add(onlineNodes);
-        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
-        JSONRPC2Response response = null;
+        peer.connection(presentIP.get(0), 8020, method, requestID, list);
 
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult());
-        } else
-            System.out.println(response.getError().getMessage());
     }
 
     /**
      * start collecting online nodes, started by the anchor nodes
+     *
      * @param newNodeIP IP address of the new node
      */
 
@@ -565,7 +504,6 @@ public class PeerClass extends Thread {
         // call the successor node based on the finger table
         // checking if the successor is itself
         if (present.get(0) == nodeID) {
-//            System.out.println("Successor is me!");
             // send the ip of anchor node to the new node
             HashMap<String, String> onlineNodes = new HashMap<>();
             onlineNodes.put("" + nodeID, ip);
@@ -573,14 +511,6 @@ public class PeerClass extends Thread {
             peer.contactNewNode(newNodeIP, onlineNodes);
 
         } else {
-            try {
-                serverURL = new URL("http://" + presentIP.get(0) + ":" + 8020); // calling the successor
-
-            } catch (MalformedURLException e) {
-                // handle exception...
-            }
-            // Create new JSON-RPC 2.0 client session
-            JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
 
             String method = "collectingOnlineNodes";
             int requestID = 5;
@@ -588,6 +518,7 @@ public class PeerClass extends Thread {
             ArrayList<Object> list = new ArrayList<>();
 
             list.add(newNodeIP);
+            list.add(ip); // starting node IP
 
             HashMap<String, String> onlineNodes = new HashMap<>();
 
@@ -595,26 +526,8 @@ public class PeerClass extends Thread {
             onlineNodes.put("" + nodeID, ip);
             list.add(onlineNodes);
 
-            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+            peer.connection(presentIP.get(0), 8020, method, requestID, list);
 
-            JSONRPC2Response response = null;
-
-            try {
-                response = mySession.send(request);
-
-            } catch (JSONRPC2SessionException e) {
-
-                System.err.println(e.getMessage());
-                // handle exception...
-            }
-
-            System.out.println(presentIP);
-
-            // Print response result / error
-            if (response.indicatesSuccess()) {
-//                System.out.println(response.getResult());
-            } else
-                System.out.println(response.getError().getMessage());
         }
     }
 
@@ -627,7 +540,7 @@ public class PeerClass extends Thread {
     public void display() {
         System.out.println("Finger table for node: " + nodeID);
         System.out.println(" -----------------------------------------------");
-        System.out.println("| \ti \t| k + 2i   \t| successor    |");
+        System.out.println("| \ti \t| k + 2i   \t| successor     |");
         System.out.println("|-----------------------------------------------|");
         for (int i = 0; i < (int) (Math.log(16) / Math.log(2)); i++) {
             System.out.println("|\t" + i + " \t|   " + actual.get(i) + "\t\t|" + present.get(i) + " (" + presentIP.get(i) + ") |");
@@ -666,9 +579,9 @@ public class PeerClass extends Thread {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        System.out.println("Ip " + ip);
         try {
             while (true) {
-                System.out.println("Ip " + ip);
                 new Handler(listener.accept()).start();
             }
         } catch (IOException e) {
@@ -694,6 +607,7 @@ public class PeerClass extends Thread {
 
     /**
      * to contact the manager when a new node joins the system
+     *
      * @param port manager's port
      */
 
@@ -761,8 +675,9 @@ public class PeerClass extends Thread {
 
     /**
      * initialize finger table when a new node joins the system
+     *
      * @param onlineNodes list of all the online nodes
-     * @param newNodeID id of the new node
+     * @param newNodeID   id of the new node
      * @throws InterruptedException
      */
 
@@ -775,7 +690,7 @@ public class PeerClass extends Thread {
             onlineNodeList.add(Integer.parseInt(entry.getKey()));
         }
 
-        System.out.println("I'm the second node: " + newNodeID);
+        System.out.println("My node ID: " + newNodeID);
         nodeID = newNodeID;
 
         Collections.sort(onlineNodeList);
@@ -818,30 +733,18 @@ public class PeerClass extends Thread {
             }
         }
 
-//        System.out.println("the successor is: " + onlineNodes.get("" + successorID));
-//        System.out.println("the predecessor is: " + onlineNodes.get("" + predecessorID));
         peer.requestKeysFromSuccessor(onlineNodes.get("" + successorID), "" + predecessorID);
 
     }
 
     /**
      * to request keys from successor when a new node joins the system
+     *
      * @param successorIP IP address of the new ndoe
      * @param predecessor IP address of the new node
      */
 
     public void requestKeysFromSuccessor(String successorIP, String predecessor) {
-
-//        System.out.println("Inside requestKeysFromSuccessor");
-
-        try {
-            serverURL = new URL("http://" + successorIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
 
         String method = "requestKeys";
         int requestID = 15;
@@ -851,28 +754,14 @@ public class PeerClass extends Thread {
         list.add("" + nodeID);
         list.add(ip);
         list.add(predecessor);
-        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
-        JSONRPC2Response response = null;
+        peer.connection(successorIP, 8020, method, requestID, list);
 
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult() + "**");
-        } else
-            System.out.println(response.getError().getMessage());
     }
 
     /**
      * to get list of keys for the new node
+     *
      * @param newNodeID
      * @param newNodeIP
      * @param predecessor
@@ -880,7 +769,6 @@ public class PeerClass extends Thread {
      */
 
     public String findKeysforNewNode(String newNodeID, String newNodeIP, String predecessor) {
-//        System.out.println("Starting");
         int newNodeid = Integer.parseInt(newNodeID);
         int currentID = nodeID;
         int predecessorID = Integer.parseInt(predecessor);
@@ -935,20 +823,12 @@ public class PeerClass extends Thread {
 
     /**
      * send keys to the new node
+     *
      * @param keyString the keys
      * @param newNodeIP IP address of the new node
      */
 
     public void sendKeysToNewNode(String keyString, String newNodeIP) {
-
-        try {
-            serverURL = new URL("http://" + newNodeIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
 
         String method = "sendingKeysToNewNode";
         int requestID = 16;
@@ -956,31 +836,17 @@ public class PeerClass extends Thread {
         ArrayList<Object> list = new ArrayList<>();
 
         list.add(keyString);
-        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
-        JSONRPC2Response response = null;
+        peer.connection(newNodeIP, 8020, method, requestID, list);
 
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult());
-        } else
-            System.out.println(response.getError().getMessage());
     }
 
     /**
      * to update the finger table
+     *
      * @param onlineNodes list of online nodes
-     * @param newNodeIP IP address of the new node
-     * @param newNodeID ID of the new node
+     * @param newNodeIP   IP address of the new node
+     * @param newNodeID   ID of the new node
      * @return
      */
 
@@ -1021,8 +887,6 @@ public class PeerClass extends Thread {
             presentIP.add(i, IPadd);
         }
 
-//        System.out.println("updated presentIP: " + presentIP);
-
         return newNodeID;
     }
 
@@ -1048,10 +912,11 @@ public class PeerClass extends Thread {
 
     /**
      * to send the key to the correct node
-     * @param key the key to be delivered
-     * @param operation tells whether to store of pass key to the next node
-     * @param nodeIP IP address of the node to pass on
-     * @param function tells whether this is search or store operation
+     *
+     * @param key        the key to be delivered
+     * @param operation  tells whether to store of pass key to the next node
+     * @param nodeIP     IP address of the node to pass on
+     * @param function   tells whether this is search or store operation
      * @param findNodeIP IP address of the node which initiates the search operation
      */
 
@@ -1118,9 +983,16 @@ public class PeerClass extends Thread {
             }
             i--;
             if (actual.get(i) <= present.get(i)) {
-                if ((keyID) < present.get(i)) {
+                if (actual.get(i) > (keyID % N)) {
+                    if ((keyID) < present.get(i)) {
+                        peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i), function, findNodeIP);
+                    } else {
+                        peer.deliverKey(key, "FindKeyInsert", presentIP.get(i), function, findNodeIP);
+                    }
+                }
+                else if ((keyID % N) < present.get(i)) {
                     peer.deliverKey(key, "StoreKeyInsert", presentIP.get(i), function, findNodeIP);
-                } else {
+                }else {
                     peer.deliverKey(key, "FindKeyInsert", presentIP.get(i), function, findNodeIP);
                 }
             } else {
@@ -1177,7 +1049,6 @@ public class PeerClass extends Thread {
                     System.out.println("File is not present in the system");
                 }
             } else {
-//                System.out.println("In else find");
                 peer.findNodeForKey(key, function, findNodeIP);
             }
         }
@@ -1189,17 +1060,6 @@ public class PeerClass extends Thread {
 
     public void sendKeysToSuccessor() {
         String successorIP = presentIP.get(0);
-
-        try {
-            // contacting the manager
-            serverURL = new URL("http://" + successorIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
 
         String method = "sendingKeysToSuccessor";
         int requestID = 18;
@@ -1218,25 +1078,9 @@ public class PeerClass extends Thread {
 
             list.add(keyString);
             list.add("" + nodeID);
-            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
-            JSONRPC2Response response = null;
+            peer.connection(successorIP, 8020, method, requestID, list);
 
-            try {
-                response = mySession.send(request);
-
-            } catch (JSONRPC2SessionException e) {
-
-                System.err.println(e.getMessage());
-                // handle exception...
-            }
-
-
-            // Print response result / error
-            if (response.indicatesSuccess()) {
-//                System.out.println(response.getResult());
-            } else
-                System.out.println(response.getError().getMessage());
         }
         peer.contactSuccessorToRemove();
     }
@@ -1248,17 +1092,6 @@ public class PeerClass extends Thread {
     public void contactSuccessorToRemove() {
         String successorIP = presentIP.get(0);
 
-        try {
-            // contacting the manager
-            serverURL = new URL("http://" + successorIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
-
         ArrayList<Object> list = new ArrayList<>();
         list.add("" + nodeID);
         list.add(ip);
@@ -1266,32 +1099,17 @@ public class PeerClass extends Thread {
         String method = "removeMe";
         int requestID = 19;
 
-        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+        peer.connection(successorIP, 8020, method, requestID, list);
 
-        JSONRPC2Response response = null;
-
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult());
-        } else
-            System.out.println(response.getError().getMessage());
     }
 
     /**
      * to collect the list of online nodes when a node wants to go offline
-     * @param onlineNodes map of online nodes
+     *
+     * @param onlineNodes    map of online nodes
      * @param startingNodeID ID of the starting node
-     * @param offlineNodeID ID of the node going offline
-     * @param offlineNodeIP IP address of the node going offline
+     * @param offlineNodeID  ID of the node going offline
+     * @param offlineNodeIP  IP address of the node going offline
      */
 
     public void contactOnlineNodesRemove(HashMap<String, String> onlineNodes, String startingNodeID, String offlineNodeID, String offlineNodeIP) {
@@ -1310,17 +1128,6 @@ public class PeerClass extends Thread {
 
         String successorIP = presentIP.get(0);
 
-        try {
-            // contacting the manager
-            serverURL = new URL("http://" + successorIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
-
         String method = "collectingOnlineNodesRemove";
         int requestID = 20;
         ArrayList<Object> list = new ArrayList<>();
@@ -1332,72 +1139,31 @@ public class PeerClass extends Thread {
         list.add(offlineNodeIP);
         list.add(onlineNodes);
 
-        JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+        peer.connection(successorIP, 8020, method, requestID, list);
 
-        JSONRPC2Response response = null;
-
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult());
-        } else
-            System.out.println(response.getError().getMessage());
-
-        // updatefingertableremove()
     }
 
     /**
      * to let the node know that it can go offline
+     *
      * @param offlineNodeIP IP address of the node which wants to go offline
      */
 
     public void allowNodeGoOffline(String offlineNodeIP) {
 
-        try {
-            // contacting the manager
-            serverURL = new URL("http://" + offlineNodeIP + ":" + 8020);
-
-        } catch (MalformedURLException e) {
-            // handle exception...
-        }
-
-        // Create new JSON-RPC 2.0 client session
-        JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
-
         String method = "allowNodeGoOffline";
         int requestID = 21;
 
-        JSONRPC2Request request = new JSONRPC2Request(method, requestID);
+        ArrayList<Object> list = new ArrayList<>();
 
-        JSONRPC2Response response = null;
+        peer.connection(offlineNodeIP, 8020, method, requestID, list);
 
-        try {
-            response = mySession.send(request);
-
-        } catch (JSONRPC2SessionException e) {
-
-            System.err.println(e.getMessage());
-            // handle exception...
-        }
-
-        // Print response result / error
-        if (response.indicatesSuccess()) {
-//            System.out.println(response.getResult());
-        } else
-            System.out.println(response.getError().getMessage());
     }
 
     /**
      * to update the finger table when a node goes offline from the system
-     * @param onlineNodes map of online nodes
+     *
+     * @param onlineNodes   map of online nodes
      * @param offlineNodeID ID of the offline node
      * @param offlineNodeIP IP address of the offline node
      */
@@ -1445,9 +1211,10 @@ public class PeerClass extends Thread {
 
     /**
      * to update the finger table when a node got removed
-     * @param onlineNodes map of online nodes
-     * @param oflineNodeID ID of the offline node
-     * @param offlineNodeIP IP address of the offline node
+     *
+     * @param onlineNodes        map of online nodes
+     * @param oflineNodeID       ID of the offline node
+     * @param offlineNodeIP      IP address of the offline node
      * @param onlineNodeListDone list of online nodes who is done upating their finger table
      */
 
@@ -1467,14 +1234,6 @@ public class PeerClass extends Thread {
 
         if (!(ipAdd == null)) {
 
-            try {
-                serverURL = new URL("http://" + ipAdd + ":" + 8020);
-
-            } catch (MalformedURLException e) {
-                // handle exception...
-            }
-            // Create new JSON-RPC 2.0 client session
-            JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
 
             String method = "updateFingerTableNodeRemovePassOn";
             int requestID = 20;
@@ -1486,39 +1245,58 @@ public class PeerClass extends Thread {
             list.add(offlineNodeIP);
             list.add(onlineNodeListDone);
 
-            JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
+            peer.connection(ipAdd, 8020, method, requestID, list);
 
-            JSONRPC2Response response = null;
-
-            try {
-                response = mySession.send(request);
-
-            } catch (JSONRPC2SessionException e) {
-
-                System.err.println(e.getMessage());
-                // handle exception...
-            }
-
-            // Print response result / error
-            if (response.indicatesSuccess()) {
-                System.out.println(response.getResult());
-            } else
-                System.out.println(response.getError().getMessage());
         }
     }
 
     /**
      * to let the node know of the position of the file
-     * @param status tells if the node is present in the system or not
+     *
+     * @param status     tells if the node is present in the system or not
      * @param findNodeIP IP address of the node where the search request for file got initiated
      */
 
     public void notifyNodeAboutKey(String status, String findNodeIP) {
 
+        String method = "notifyAboutKey";
+        int requestID = 22;
+        ArrayList<Object> list = new ArrayList<>();
+        list.add(status);
+        list.add("" + nodeID);
 
+        peer.connection(findNodeIP, 8020, method, requestID, list);
+
+    }
+
+    /**
+     * Acknowledging manager to remove from current list of anchor nodes
+     */
+
+    public void removeFromAnchorNodeList() {
+
+        String method = "removeFromAnchorNodeList";
+        int requestID = 25;
+        ArrayList<Object> list = new ArrayList<>();
+        list.add(ip);
+
+        peer.connection(managerIP, 8015, method, requestID, list);
+
+    }
+
+    /**
+     * Establishes connection to other peers
+     *
+     * @param ipAdd
+     * @param port
+     * @param method
+     * @param requestID
+     * @param list
+     */
+
+    public void connection (String ipAdd, int port, String method, int requestID, ArrayList<Object> list) {
         try {
-            // contacting the manager
-            serverURL = new URL("http://" + findNodeIP + ":" + 8020);
+            serverURL = new URL("http://" + ipAdd + ":" + port);
 
         } catch (MalformedURLException e) {
             // handle exception...
@@ -1526,12 +1304,6 @@ public class PeerClass extends Thread {
 
         // Create new JSON-RPC 2.0 client session
         JSONRPC2Session mySession = new JSONRPC2Session(serverURL);
-
-        String method = "notifyAboutKey";
-        int requestID = 22;
-        ArrayList<Object> list = new ArrayList<>();
-        list.add(status);
-        list.add("" + nodeID);
 
         JSONRPC2Request request = new JSONRPC2Request(method, list, requestID);
 
@@ -1555,6 +1327,7 @@ public class PeerClass extends Thread {
 
     /**
      * The main function
+     *
      * @param args
      * @throws IOException
      * @throws InterruptedException

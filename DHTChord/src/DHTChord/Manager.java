@@ -15,8 +15,7 @@ import java.net.MalformedURLException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.*;
 
 /**
  * This is a lite manager which will store data for some of the online nodes in the system.
@@ -27,7 +26,8 @@ public class Manager extends Thread {
     URL serverURL = null;
 
     // to store identity of max 3 online nodes
-    static HashMap<Integer, String> onlineNodes = new HashMap<>();
+    public static HashMap<Integer, String> onlineNodes = new HashMap<>();
+    public static List<String> anchorNodes = new ArrayList<>();
     // to store the keys if every node went offline
     ArrayList<Key> keys = new ArrayList<>();
 
@@ -37,6 +37,7 @@ public class Manager extends Thread {
         private BufferedReader in;
         private PrintWriter out;
         private Dispatcher dispatcher;
+        Random random = new Random();
 
         public Handler(Socket socket) {
 
@@ -93,6 +94,7 @@ public class Manager extends Thread {
                 // checking for the first element in the system
                 if (resp.getResult().toString().startsWith("FirstNode")) {
                     onlineNodes.put(1, resp.getResult().toString().split(",")[1]);
+                    anchorNodes.add(resp.getResult().toString().split(",")[1]);
                     System.out.println("IP received: " + resp.getResult().toString().split(",")[1]);
                     // send response
                     // TODO: 10/14/18 make peer 1 initialize itself
@@ -104,7 +106,7 @@ public class Manager extends Thread {
                     socket.close();
 
                 } else if (resp.getResult().toString().startsWith("NotFirstNode")) {
-                    System.out.println("Request received");
+                    System.out.println("Request received1");
                     String newNodeIP = resp.getResult().toString().split(",")[1];
                     out.write(resp.toJSONString()); // closing the connection with the new node
                     out.flush();
@@ -112,8 +114,28 @@ public class Manager extends Thread {
                     out.close();
                     socket.close();
 
-                    // TODO: 10/14/18 function call to anchor node anc check on port number
-                    manager.callAnchorNode(Manager.onlineNodes.get(1), 8020, newNodeIP);
+                    int r = random.nextInt(anchorNodes.size());
+                    int count = 0;
+
+                    String anchorNodeIP = anchorNodes.get(r);
+
+                    r = random.nextInt(2);
+
+                    if (anchorNodes.size() < 4) {
+                        anchorNodes.add(newNodeIP);
+                    } else if (r == 0){
+                        anchorNodes.remove(0);
+                        anchorNodes.add(newNodeIP);
+                    }
+
+                    manager.callAnchorNode(anchorNodeIP, 8020, newNodeIP);
+                } else if (resp.getResult().toString().startsWith("RemoveNode")) {
+                    String ip = resp.getResult().toString().split(",")[1];
+                    anchorNodes.remove(ip);
+                    out.write(resp.toJSONString()); // closing the connection with the new node
+                    out.flush();
+                    out.close();
+                    socket.close();
                 }
 
             } catch (IOException e) {
@@ -131,6 +153,7 @@ public class Manager extends Thread {
 
         } catch (MalformedURLException e) {
             // handle exception...
+            System.out.println("Node offline");
         }
 
 
